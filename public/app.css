@@ -1,4 +1,4 @@
-/* Laju — halaman aplikasi (Dashboard & Tangga milestone) */
+/* Laju: halaman aplikasi (Dashboard & Tangga milestone) */
 
 body.app main { padding: 8px 0 72px; }
 #view:focus { outline: none; }
@@ -107,7 +107,7 @@ body.app main { padding: 8px 0 72px; }
 .next-up p { font-size: .86rem; color: var(--muted-fg); margin-top: 2px; }
 
 /* =====================================================================
-   v6 — detail tangga: target jelas, perbarui langsung, rencana, riwayat
+   v6: detail tangga: target jelas, perbarui langsung, rencana, riwayat
    ===================================================================== */
 
 /* ---------- target: sekarang vs target ---------- */
@@ -338,3 +338,37 @@ body.app main { padding: 8px 0 72px; }
 .snack.show.has-btn { pointer-events: auto; }
 .snack-btn { flex: none; min-height: 40px; padding: 0 12px; border: 0; border-radius: 99px; background: var(--primary); color: var(--primary-fg); font: inherit; font-weight: 800; cursor: pointer; }
 @media (prefers-reduced-motion: reduce) { .snack { transition: none; } }
+
+/* ---------- navigasi bawah + tombol Catat ---------- */
+body.app main { padding-bottom: 120px; }
+.bottomnav { position: fixed; z-index: 40; left: 50%; bottom: 0; transform: translateX(-50%); width: min(100%, calc(var(--phone, 440px) + 32px)); display: grid; grid-template-columns: repeat(5, 1fr); background: var(--card); border-top: 1px solid var(--border); padding: 6px 8px calc(6px + env(safe-area-inset-bottom)); }
+.navitem { display: flex; flex-direction: column; align-items: center; gap: 2px; min-height: 52px; justify-content: center; border-radius: 1rem; text-decoration: none; color: var(--muted-fg); font-size: .72rem; font-weight: 700; }
+.navitem .icon { width: 22px; height: 22px; }
+.navitem[aria-current="page"] { color: var(--fg); background: var(--primary); }
+.navcatat { align-self: center; justify-self: center; display: inline-flex; flex-direction: column; align-items: center; justify-content: center; gap: 0; width: 64px; height: 64px; margin-top: -26px; border: 2px solid var(--fg); border-radius: 99px; background: var(--primary); color: var(--primary-fg); font: inherit; font-size: .7rem; font-weight: 800; cursor: pointer; box-shadow: 0 3px 0 0 var(--fg); }
+.navcatat .icon { width: 22px; height: 22px; }
+.navcatat:active { transform: translateY(2px); box-shadow: 0 1px 0 0 var(--fg); }
+body.no-fab .bottomnav { display: none; }
+.snack { bottom: calc(96px + env(safe-area-inset-bottom)); }
+
+/* ---------- Profil ---------- */
+.prof-list { padding: 6px 0; gap: 0; }
+.prow { display: flex; align-items: center; gap: 12px; padding: 14px 20px; text-decoration: none; color: inherit; border-bottom: 1px solid var(--border); }
+.prow:last-child { border-bottom: 0; }
+.prow:hover { background: var(--secondary); }
+.prow-txt { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.prow-txt b { font-size: .95rem; }
+.prow-txt small { color: var(--muted-fg); font-size: .8rem; overflow-wrap: anywhere; }
+.prow .chev { font-size: 1.3rem; color: var(--muted-fg); }
+.kv-list { margin: 0; display: flex; flex-direction: column; }
+.kv-list div { display: flex; justify-content: space-between; gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--border); font-size: .86rem; }
+.kv-list div:last-child { border-bottom: 0; }
+.kv-list dt { color: var(--muted-fg); }
+.kv-list dd { margin: 0; font-weight: 700; text-align: right; }
+
+/* ---------- lembar + Catat ---------- */
+.catat-list { display: flex; flex-direction: column; gap: 8px; }
+.catat-opt { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; width: 100%; min-height: 60px; padding: 12px 16px; border: 1.5px solid var(--border); border-radius: 1.1rem; background: var(--card); text-align: left; font: inherit; cursor: pointer; }
+.catat-opt b { font-size: .98rem; }
+.catat-opt small { color: var(--muted-fg); font-size: .8rem; }
+.catat-opt:hover, .catat-opt:focus-visible { border-color: var(--fg); }

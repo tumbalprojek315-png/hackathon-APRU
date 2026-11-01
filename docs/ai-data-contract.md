@@ -30,10 +30,10 @@
 
 | Data | Alasan |
 |---|---|
-| Nama lengkap, nomor HP, username | identitas; tidak diperlukan untuk analisis |
-| Password | tidak pernah disimpan di browser; tidak pernah dikirim ke AI |
-| Area narik detail | bisa melacak lokasi; kota sudah cukup untuk konteks biaya hidup |
-| Token/akses e-wallet | hanya ada di server (`server.py`); AI cukup menerima ringkasan |
+| Nama lengkap, nomor HP, username | identitas. Tidak diperlukan untuk analisis |
+| Password | tidak pernah disimpan di browser. Tidak pernah dikirim ke AI |
+| Area narik detail | bisa melacak lokasi. Kota sudah cukup untuk konteks biaya hidup |
+| Token/akses e-wallet | hanya ada di server (`server.py`). AI cukup menerima ringkasan |
 | Transaksi e-wallet mentah | hanya ringkasan per bulan yang dikirim (prinsip minimisasi data, UU PDP) |
 
 Nama tetap dipakai **di aplikasi** (sapaan "Halo, …"). Bila respons Claude butuh sapaan, aplikasi menyisipkan nama secara lokal setelah respons diterima.
@@ -46,7 +46,7 @@ Nama tetap dipakai **di aplikasi** (sapaan "Halo, …"). Bila respons Claude but
 | Kota | ✅ | konteks biaya hidup & UMR |
 | Aplikasi, kendaraan, kepemilikan | ✅ | kepemilikan kredit = cicilan tersembunyi |
 | Jam & hari narik | ✅ | dasar setoran per hari & tarif per jam |
-| Area narik | ❌ tidak dikirim | tidak dipakai di perhitungan; risiko privasi. **Kandidat dihapus dari onboarding.** |
+| Area narik | ❌ tidak dikirim | tidak dipakai di perhitungan. Risiko privasi. **Kandidat dihapus dari onboarding.** |
 | Status keluarga, tanggungan | ✅ | menentukan besar dana darurat yang wajar |
 | Usaha sampingan | ✅ | potensi menambah pemasukan |
 | Pendapatan per aplikasi, bonus, tip, lain-lain, hari ramai/sepi | ✅ | inti analisis arus kas |

@@ -1,4 +1,4 @@
-/* Laju v3 — combobox, "Lainnya" inputs, dual range, calendar, locked step,
+/* Laju v3: combobox, "Lainnya" inputs, dual range, calendar, locked step,
    and the data-viz used on the Hasil page.
    Chart colors were validated with the dataviz palette validator against
    the card surface #f8f6f0 (all checks pass, incl. all-pairs CVD). */
@@ -332,3 +332,25 @@ details.cf-calc[open] summary::after { transform: translateY(1px) rotate(-135deg
   .topbar-row .ghost-btn { padding: 0 8px; font-size: .75rem; gap: 6px; }
   .topbar-row .ghost-btn .icon { display: none; }
 }
+
+
+/* ---------- catatan info: tombol "Info" di judul, isi muncul saat diketuk ---------- */
+.info-dot { display: inline-flex; align-items: center; gap: 4px; margin-left: 8px; height: 26px; padding: 0 10px; border: 1px solid var(--border); border-radius: 99px; background: var(--card); color: var(--muted-fg); font: inherit; font-size: .72rem; font-weight: 700; line-height: 1; letter-spacing: 0; text-transform: none; vertical-align: middle; cursor: pointer; white-space: nowrap; }
+.info-dot .icon { width: 14px; height: 14px; }
+.info-dot:hover { color: var(--fg); border-color: var(--fg); }
+.info-dot[aria-expanded="true"] { background: var(--fg); color: var(--bg); border-color: var(--fg); }
+.info-pop { display: flex; flex-direction: column; gap: 6px; margin: 8px 0 0; padding: 4px 0 4px 12px; border-left: 3px solid var(--border); font-size: .8rem; line-height: 1.5; color: var(--muted-fg); }
+.info-pop[hidden] { display: none; }
+.info-pop p { margin: 0; }
+.info-pop .tag { margin-right: 6px; }
+/* catatan berisi tombol aksi / satu-satunya isi kartu: teks ringan, tanpa kotak */
+.note.inline, .note.plain { background: none; padding: 0; border-radius: 0; }
+.note.inline.accent { color: var(--fg); }
+.note.plain { color: var(--fg); font-size: .86rem; }
+
+/* Dashboard: ringkasan pengecekan satu baris */
+.checks-sum { display: flex; gap: 8px; align-items: center; margin: 0; font-size: .84rem; font-weight: 600; }
+.checks-sum svg { width: 18px; height: 18px; flex: none; color: var(--st-serious-ink); }
+
+/* mode ubah satu bagian Profil (onboarding.html?edit=...) */
+body.editing .pills, body.editing .progress, body.editing #demoBtn, body.editing #resetBtn { display: none; }

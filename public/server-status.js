@@ -13,7 +13,7 @@
 //     timeout, so without the watch OFFLINE would lag by ~1.5 s.)
 //     Servers without the watch endpoint (static hosts, serverless) are
 //     detected automatically and get ping-only.
-// The light blinks once per finished check — each blink is a real result,
+// The light blinks once per finished check, each blink is a real result,
 // never a timer running on its own.
 //
 // Usage:

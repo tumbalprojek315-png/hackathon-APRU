@@ -1,4 +1,4 @@
-/* Laju — logika bersama: data acuan, state, perhitungan, grafik, API.
+/* Laju: logika bersama: data acuan, state, perhitungan, grafik, API.
    Dipakai oleh onboarding.html dan app.html (script biasa, bukan modul). */
 "use strict";
 
@@ -17,10 +17,10 @@
     { id: "lalamove", label: "Lalamove" },
   ];
   const OWNERSHIP = [
-    { id: "lunas", label: "Milik sendiri (lunas)" },
-    { id: "kredit", label: "Masih kredit / leasing" },
-    { id: "sewa", label: "Sewa harian / setoran" },
-    { id: "pinjam", label: "Pinjam dari keluarga" },
+    { id: "lunas", label: "Milik sendiri" },
+    { id: "sewa", label: "Sewa" },
+    { id: "kredit", label: "Kredit" },
+    { id: "pinjam", label: "Pinjam" },
   ];
   const STATUS = [{ id: "lajang", label: "Belum menikah" }, { id: "menikah", label: "Menikah" }];
   const SIDE_JOBS = ["Jualan online", "Warung", "Serabutan", "Bertani / berkebun"];
@@ -44,7 +44,7 @@
   const EXPENSE_GROUPS = [
     { id: "rumah", label: "Kebutuhan rumah tangga", caption: "Yang harus keluar meski Anda tidak narik" },
     { id: "kendaraan", label: "Operasional kerja", caption: "Biaya supaya bisa terus narik" },
-    { id: "gaya", label: "Gaya hidup & sosial", caption: "Sering paling besar bocornya — jujur saja" },
+    { id: "gaya", label: "Gaya hidup & sosial", caption: "Pos yang paling sering bocor." },
   ];
   const EXPENSE_CATEGORIES = [
     { id: "makan", group: "rumah", label: "Makan & minum", min: 1500000, max: 2500000 },
@@ -87,6 +87,20 @@
     { id: "warn", label: "Cukup sehat", from: 60, to: 80, color: "var(--st-warn)" },
     { id: "good", label: "Sehat", from: 80, to: 101, color: "var(--st-good)" },
   ];
+  // Bagian Profil: data yang jarang berubah. Tiap bagian membuka form onboarding untuk langkah/kartu terkait
+  // (onboarding.html?edit=<id>). parts = kartu yang ditampilkan (class "part-<nama>"), null = seluruh langkah.
+  const PROFILE_SECTIONS = [
+    { id: "identitas", title: "Identitas", steps: [["akun", ["identitas"]]] },
+    { id: "kerja", title: "Cara kerja", steps: [["profil", ["aplikasi", "kendaraan", "ritme"]]] },
+    { id: "keluarga", title: "Keluarga", steps: [["profil", ["keluarga"]]] },
+    { id: "uang", title: "Uang & rekening", steps: [["profil", ["uang"]], ["ketahanan", ["simpan"]]] },
+    { id: "ewallet", title: "E-wallet & izin", steps: [["izin", null], ["ewallet", null]] },
+    { id: "proteksi", title: "Proteksi", steps: [["profil", ["proteksi"]]] },
+    { id: "keuangan", title: "Keuangan bulanan", steps: [["pendapatan", null], ["pengeluaran", ["belanja"]]] },
+    { id: "utang", title: "Daftar utang", steps: [["pengeluaran", ["utang"]]] },
+    { id: "tujuan", title: "Tujuan", steps: [["ketahanan", ["tujuan"]]] },
+  ];
+  const editUrl = (id) => `onboarding.html?edit=${id}`;
   const MONTHS = ["Januari", "Februari", "Maret", "April", "Mei", "Juni", "Juli", "Agustus", "September", "Oktober", "November", "Desember"];
   const DAYNAMES = ["Minggu", "Senin", "Selasa", "Rabu", "Kamis", "Jumat", "Sabtu"];
 
@@ -134,6 +148,7 @@
     if ("useOpenFinance" in c) { c.useWallet = c.useOpenFinance === true; c.useManual = c.useOpenFinance === false; delete c.useOpenFinance; delete c.acknowledgeUnverified; }
     if (s.account.city && s.account.city !== "Lainnya" && !CITIES.some(x => x.name === s.account.city)) { s.account.cityOther = s.account.city; s.account.city = "Lainnya"; }
     delete s.expenses.jajan; delete s.income.volatility; delete s.reconcileChoice; delete s.cash;
+    s.overrides = {};   // angka "bulan ini" dari halaman Tangga dihapus: pendapatan & pengeluaran hanya diubah di Profil
     const pr = s.profile, rs = s.resilience;
     // v3 → v4: satu kolom "Lainnya" menjadi daftar opsi buatan sendiri
     const clean = (t) => String(t || "").trim().replace(/\./g, "");
@@ -282,14 +297,14 @@
 
   // ---------- Calculations ----------
   // Isian manual = gambaran LENGKAP (tunai + non-tunai) dan selalu jadi dasar hitungan.
-  // E-wallet (opsional) = alat VERIFIKASI: membuktikan sebagian isian; selisihnya dijelaskan pengguna
-  // (tunai, rekening bank, e-wallet lain) — lihat verifyItems(). Satu pengecualian: bila e-wallet
+  // E-wallet (opsional) = alat VERIFIKASI: membuktikan sebagian isian, selisihnya dijelaskan pengguna
+  // (tunai, rekening bank, e-wallet lain), lihat verifyItems(). Satu pengecualian: bila e-wallet
   // mencatat LEBIH BESAR dari isian (isian pasti terlalu kecil), angka e-wallet dipakai sebagai batas
   // bawah sampai pengguna menyesuaikan isian atau menandainya "bukan milik saya".
   const WEEKS = 4.33;
   const r1k = (n) => Math.round((Number(n) || 0) / 1000) * 1000;
   const perDayFormula = (v) => `${rp(Number(v) || 0)}/hari × ${S.profile.daysPerWeek} hari × ${String(WEEKS).replace(".", ",")} minggu`;
-  // pencairan terverifikasi per aplikasi di profil; aplikasi buatan sendiri memakai pencairan "aplikasi lain"
+  // pencairan terverifikasi per aplikasi di profil, aplikasi buatan sendiri memakai pencairan "aplikasi lain"
   function verifiedFor(id, agg) {
     if (!isCustom(id)) return agg.byPlatform[id] || 0;
     const firstCustom = S.profile.platforms.find(isCustom);
@@ -433,69 +448,61 @@
   }
   const REASONS_GAP = () => {
     const nc = channelStatus().notConnected.map(channelLabel);
-    return [["tunai", "Tunai"], ["bank", "Rekening bank"], ["lain", nc.length ? `E-wallet lain (${nc.join(", ")})` : "E-wallet lain"], ["tinggi", "Perkiraan saya terlalu tinggi"]];
+    return [["tunai", "Tunai"], ["bank", "Rekening bank"], ["lain", nc.length ? nc.join(" / ") : "E-wallet lain"], ["tinggi", "Perkiraan kebesaran"]];
   };
-  const REASON_LABEL = (r) => ({ tunai: "lewat tunai", bank: "lewat rekening bank", lain: "lewat e-wallet lain", tinggi: "perkiraan terlalu tinggi", bukan: "bukan milik pengguna" }[r] || "");
+  const REASON_LABEL = (r) => ({ tunai: "tunai", bank: "rekening bank", lain: "e-wallet lain", tinggi: "perkiraan kebesaran", bukan: "dikecualikan" }[r] || "");
   const V_STATUS = {
-    ok: ["good", "Cocok"], part: ["warn", "Sebagian terverifikasi"], none: ["warn", "Tidak lewat e-wallet"],
-    over: ["serious", "Isian terlalu kecil"], missing: ["serious", "Belum diisi"],
+    ok: ["good", "Cocok"], part: ["warn", "Sebagian"], none: ["warn", "Tidak di e-wallet"],
+    over: ["serious", "Isian kurang"], missing: ["serious", "Belum diisi"],
   };
-  // Teks + tombol verifikasi untuk satu item. interactive = tampilkan pilihan alasan / tombol sesuaikan.
+  // Satu baris verifikasi per item. interactive = tampilkan pilihan alasan / tombol.
   function verifyLine(i, { interactive = false } = {}) {
     if (!i) return "";
-    // pendapatan aplikasi belum diisi sama sekali: jangan langsung "menuduh", cukup beri pembanding
-    if (i.key === "inc:app" && i.m === 0) return `<div class="vf none"><p>E-wallet mencatat pencairan aplikasi <b>${rp(i.w)}</b>/bln. Isi pendapatan Anda di atas — termasuk yang dibayar tunai — lalu Laju mencocokkannya.</p></div>`;
+    if (i.key === "inc:app" && i.m === 0) return `<div class="vf none"><p>E-wallet: pencairan ${rp(i.w)}/bln. Isi pendapatan Anda di atas.</p></div>`;
     const excluded = (i.status === "over" || i.status === "missing") && i.reason === "bukan";
     const [st, stLabel] = excluded ? ["warn", "Dikecualikan"] : V_STATUS[i.status];
     const range = i.lo !== i.hi ? `${rp(i.lo)}–${rp(i.hi)}` : rp(i.m);
-    let text = "", actions = "";
-    if (i.status === "ok") text = `E-wallet ${rp(i.w)} · cocok dengan isian ${range}.`;
-    else if (i.status === "part" || i.status === "none") {
-      text = i.status === "part" ? `E-wallet ${rp(i.w)} dari isian ${range}. Sekitar <b>${rp(i.gap)}</b> tidak terlihat di e-wallet — lewat mana?` : `Tidak ada di e-wallet. Isian ${range} ${i.group === "in" ? "diterima" : "dibayar"} lewat mana?`;
-      if (interactive) actions = `<div class="chips vf-chips">${REASONS_GAP().map(([v, l]) => chip(`verify.${i.key}`, v, l, false)).join("")}</div>${i.reason === "tinggi" ? `<p class="vf-note">Turunkan isian di atas supaya mendekati ${rp(i.w)}.</p>` : ""}`;
-      else if (i.reason) text += ` <i>(${REASON_LABEL(i.reason)})</i>`;
-    } else {
-      text = i.status === "missing" ? `Tidak Anda isi, padahal tercatat <b>${rp(i.w)}</b> di e-wallet.` : `E-wallet saja sudah <b>${rp(i.w)}</b>, isian Anda ${range}.`;
-      if (i.adjusted) text += ` Sementara Laju memakai ${rp(i.w)}.`;
-      else if (!i.floor && i.reason !== "bukan") text += " Kalau itu pendapatan, naikkan isian; kalau pinjaman/titipan, tandai bukan pendapatan.";
-      if (interactive) actions = `<div class="chips vf-chips">${i.key === "debt" ? `<button type="button" class="chip" data-action="addDebt">Tambah utang yang belum dicatat</button>` : `<button type="button" class="chip" data-action="vfix" data-id="${i.key}">Sesuaikan isian ke ${rp(i.w)}</button>`}${chip(`verify.${i.key}`, "bukan", i.group === "in" ? "Bukan pendapatan saya (pinjaman / titipan)" : i.group === "debt" ? "Bukan cicilan saya" : "Bukan milik saya (titipan / bayarkan orang lain)", false)}</div>`;
-      else if (i.reason === "bukan") text += ` <i>(${REASON_LABEL(i.reason)})</i>`;
+    let text, actions = "";
+    if (excluded) text = `E-wallet ${rp(i.w)}, ditandai ${i.group === "in" ? "pinjaman / titipan" : "bukan milik Anda"}.`;
+    else if (i.status === "ok") text = `E-wallet ${rp(i.w)}, isian ${range}.`;
+    else if (i.status === "part") text = `E-wallet ${rp(i.w)}, isian ${range}. Sisa ${rp(i.gap)} lewat mana?`;
+    else if (i.status === "none") text = `Tidak ada di e-wallet. Lewat mana?`;
+    else text = `E-wallet ${rp(i.w)}, isian ${i.status === "missing" ? "kosong" : range}.${i.adjusted ? ` Laju pakai ${rp(i.w)}.` : ""}`;
+    if (i.status === "part" || i.status === "none") {
+      if (interactive) actions = `<div class="chips vf-chips">${REASONS_GAP().map(([v, l]) => chip(`verify.${i.key}`, v, l, false)).join("")}</div>${i.reason === "tinggi" ? `<p class="vf-note">Turunkan ke sekitar ${rp(i.w)}.</p>` : ""}`;
+      else if (i.reason) text += ` (${REASON_LABEL(i.reason)})`;
+    } else if (i.status === "over" || i.status === "missing") {
+      const notMine = i.group === "in" ? "Pinjaman / titipan" : i.group === "debt" ? "Bukan cicilan saya" : "Bukan milik saya";
+      if (interactive) actions = `<div class="chips vf-chips">${i.key === "debt" ? `<button type="button" class="chip" data-action="addDebt">Tambah utang</button>` : `<button type="button" class="chip" data-action="vfix" data-id="${i.key}">Pakai ${rp(i.w)}</button>`}${chip(`verify.${i.key}`, "bukan", notMine, false)}</div>`;
     }
-    if (excluded) text = `E-wallet mencatat ${rp(i.w)}, isian ${range}. Anda menandai selisihnya ${i.group === "in" ? "bukan pendapatan (pinjaman / titipan)" : "bukan milik Anda"}, jadi isian Anda yang dipakai.`;
     return `<div class="vf ${excluded ? "excluded" : i.status}"><span class="vf-head">${statusPill(st, stLabel)}</span><p>${text}</p>${actions}</div>`;
   }
 
-  // Pengecekan: mana yang bisa dipercaya, mana yang masih ambigu.
+  // Pengecekan: hanya hal yang bisa ditindaklanjuti, item sejenis digabung jadi satu baris.
   const ESSENTIAL = ["makan", "bbm"];
   function dataChecks(c) {
     const out = [], agg = c.agg, ov = S.overrides || {};
+    const names = (arr) => arr.map(i => i.label).join(", ");
     if (c.verified) {
-      for (const i of c.items) {
-        if ((i.status === "over" || i.status === "missing") && i.reason !== "bukan") out.push({ lv: "warn", step: i.step, text: i.floor
-          ? `${i.label}: ${i.status === "missing" ? "tidak diisi" : `isian ${rp(i.m)} lebih kecil`}, padahal e-wallet mencatat ${rp(i.w)}. Laju memakai ${rp(i.w)} sampai isian disesuaikan.`
-          : `${i.label}: e-wallet mencatat ${rp(i.w)}, isian ${rp(i.m)}. Kalau itu pendapatan, naikkan isian; kalau pinjaman/titipan, tandai bukan pendapatan.` });
-        if (i.reason === "tinggi" && (i.status === "part" || i.status === "none")) out.push({ lv: "warn", step: i.step, text: `${i.label}: Anda menandai perkiraan terlalu tinggi — turunkan isiannya supaya hitungan akurat.` });
-      }
+      const small = c.items.filter(i => i.floor && (i.status === "over" || i.status === "missing") && i.reason !== "bukan");
+      if (small.length) out.push({ lv: "warn", step: small[0].step, text: `Lebih kecil dari e-wallet: ${names(small)}. Laju pakai angka e-wallet.` });
+      const other = c.items.find(i => i.key === "inc:other" && (i.status === "over" || i.status === "missing") && i.reason !== "bukan");
+      if (other) out.push({ lv: "warn", step: "pendapatan", text: `Ada uang masuk ${rpShort(other.w)} di e-wallet. Pendapatan atau pinjaman?` });
+      const high = c.items.filter(i => i.reason === "tinggi" && (i.status === "part" || i.status === "none"));
+      if (high.length) out.push({ lv: "warn", step: high[0].step, text: `Turunkan perkiraan: ${names(high)}.` });
       const open = c.items.filter(i => (i.status === "part" || i.status === "none") && !i.reason && i.gap >= 50000);
-      if (open.length) out.push({ lv: "info", step: open[0].step, text: `${open.length} selisih belum dijelaskan (${open.slice(0, 4).map(i => i.label).join(", ")}${open.length > 4 ? ", …" : ""}). Pilih lewat mana uangnya: tunai, rekening bank, atau e-wallet lain.` });
+      if (open.length) out.push({ lv: "info", step: open[0].step, text: `${open.length} selisih belum dijelaskan.` });
       // uang di luar e-wallet harus ada asalnya
       if (ov.expense == null && ov.income == null) {
         const g = (grp) => c.items.filter(i => i.group === grp && (i.status === "part" || i.status === "none") && i.reason !== "tinggi").reduce((s, i) => s + i.gap, 0);
-        const cashIn = g("in") + agg.internalOut, cashOut = g("out") + g("debt") + agg.internalIn;
-        const gap = cashOut - cashIn;
-        if (gap > Math.max(200000, cashIn * 0.1)) out.push({ lv: "warn", step: "pendapatan", text: `Menurut isian, ±${rp(r1k(cashOut))}/bln dibayar di luar e-wallet, tapi uang yang masuk di luar e-wallet (pendapatan yang tidak terlihat + tarik saldo) hanya ±${rp(r1k(cashIn))}. Selisih ${rp(r1k(gap))} belum jelas asalnya: mungkin ada pendapatan tunai yang belum diisi, atau pengeluaran tunai terlalu tinggi.` });
-        else if (cashOut > 0) out.push({ lv: "ok", text: `Uang di luar e-wallet masuk akal: masuk ±${rp(r1k(cashIn))}/bln (termasuk tarik saldo ${rp(agg.internalOut)}), keluar ±${rp(r1k(cashOut))}/bln.` });
+        const gap = g("out") + g("debt") + agg.internalIn - (g("in") + agg.internalOut);
+        if (gap > Math.max(200000, (g("in") + agg.internalOut) * 0.1)) out.push({ lv: "warn", step: "pendapatan", text: `Uang tunai keluar ${rpShort(r1k(gap))} lebih banyak dari yang masuk. Ada pendapatan tunai yang belum diisi?` });
       }
-      if (agg.expenseTotal > c.expMax && ov.expense == null) out.push({ lv: "warn", step: "pengeluaran", text: `Total uang keluar di e-wallet (${rp(agg.expenseTotal)}) lebih besar dari perkiraan pengeluaran tertinggi Anda (${rp(c.expMax)}).` });
-      if (agg.byCategory.lainnya) out.push({ lv: "info", text: `${rp(agg.byCategory.lainnya)} transaksi e-wallet belum dikenali kategorinya, jadi tidak ikut dicocokkan.` });
-      const ch = channelStatus(agg);
-      if (ch.notConnected.length) out.push({ lv: "info", text: `${ch.notConnected.map(channelLabel).join(", ")} Anda pakai tapi belum dihubungkan — transaksinya tidak bisa diverifikasi.` });
-    } else {
-      out.push({ lv: "info", text: "Semua angka berasal dari isian Anda sendiri (belum terverifikasi). Hubungkan e-wallet supaya isian bisa dicocokkan dengan transaksi." });
+      if (agg.expenseTotal > c.expMax && ov.expense == null) out.push({ lv: "warn", step: "pengeluaran", text: `Uang keluar di e-wallet (${rpShort(agg.expenseTotal)}) melebihi perkiraan tertinggi Anda.` });
     }
-    for (const id of ESSENTIAL) if (!expMidOf(id) && !(c.verified && agg.byCategory[id])) out.push({ lv: "warn", step: "pengeluaran", text: `${categoryLabel(id)} tidak dihitung — kemungkinan besar terlewat.` });
-    if (c.debtGuess.length) out.push({ lv: "info", step: "pengeluaran", text: `${c.debtGuess.map(debtTypeLabel).join(", ")}: lama cicilan belum diisi, cicilan diperkirakan sisa utang ÷ 12 bulan.` });
-    if (ov.income != null || ov.expense != null) out.push({ lv: "info", text: "Sebagian angka memakai pembaruan Anda di halaman Tangga (bukan isian onboarding)." });
+    const miss = ESSENTIAL.filter(id => !expMidOf(id) && !(c.verified && agg.byCategory[id]));
+    if (miss.length) out.push({ lv: "warn", step: "pengeluaran", text: `Belum diisi: ${miss.map(categoryLabel).join(", ")}.` });
+    if (c.debtGuess.length) out.push({ lv: "info", step: "pengeluaran", text: `Lama cicilan ${c.debtGuess.map(debtTypeLabel).join(", ")} belum diisi (dianggap 12 bulan).` });
     return out;
   }
 
@@ -552,15 +559,15 @@
   }
 
   // ---------- Skor kesehatan finansial ----------
-  // Mengikuti kerangka FinHealth (Financial Health Network): 4 pilar — Spend, Save,
-  // Borrow, Plan — masing-masing 25 poin, semuanya dari data objektif (tanpa
+  // Mengikuti kerangka FinHealth (Financial Health Network): 4 pilar, Spend, Save,
+  // Borrow, Plan, masing-masing 25 poin, semuanya dari data objektif (tanpa
   // pertanyaan perasaan). Batas kategori juga mengikuti FinHealth: <40 rentan,
   // 40–79 bertahan (dipecah jadi "perlu dibenahi" & "cukup sehat"), ≥80 sehat.
-  // Setiap komponen punya poin, nilai sekarang, dan saran — ditampilkan apa adanya.
+  // Setiap komponen punya poin, nilai sekarang, dan saran, ditampilkan apa adanya.
   const RECORDS_LABEL = { selalu: "Selalu catat", kadang: "Kadang-kadang", never: "Tidak pernah catat" };
   const SHOCK_LABEL = { ok: "Bisa tanpa pinjam", partial: "Bisa sebagian", borrow: "Harus pinjam dulu", none: "Tidak bisa sama sekali" };
 
-  // Aktivitas di aplikasi 30 hari terakhir — membuat skor ikut bergerak saat pengguna mencatat.
+  // Aktivitas di aplikasi 30 hari terakhir, membuat skor ikut bergerak saat pengguna mencatat.
   function recentActivity() {
     const since = Date.now() - 30 * 864e5;
     const entries = S.ledger.filter(e => !e.undone && new Date(e.at).getTime() >= since);
@@ -569,7 +576,7 @@
   }
   const effectiveMonthlySave = () => Math.max(Number(S.resilience.monthlySave) || 0, recentActivity().deposits);
 
-  // persen untuk tampilan; angka ekstrem (salah ketik, dsb.) diringkas supaya tetap terbaca
+  // persen untuk tampilan, angka ekstrem (salah ketik, dsb.) diringkas supaya tetap terbaca
   const pctCap = (v) => v > 1 ? "lebih dari 100%" : v < -1 ? "lebih dari −100%" : pct(v);
   function health(c) {
     const r = S.resilience, p = S.profile, act = recentActivity();
@@ -595,13 +602,13 @@
         P("Kestabilan pendapatan", vol.ready ? { stabil: 5, naikturun: 3, fluktuatif: 1 }[vol.id] : 2, 5,
           vol.ready ? `${vol.label} · naik-turun ±${pct(vol.cv)}` : "Belum diisi", "Pendapatan naik-turun: susun anggaran dari pendapatan hari paling sepi."),
         P("Kebiasaan mencatat", Math.max({ selalu: 5, kadang: 2 }[p.recordsIncome] || 0, act.entries >= 8 ? 5 : act.entries >= 3 ? 3 : 0), 5,
-          `${RECORDS_LABEL[p.recordsIncome] || "Belum diisi"}${act.entries ? ` · ${act.entries} catatan di Laju (30 hari)` : ""}`, "Catat setiap setoran dan pembayaran di Laju — minimal 8 catatan sebulan."),
+          `${RECORDS_LABEL[p.recordsIncome] || "Belum diisi"}${act.entries ? ` · ${act.entries} catatan di Laju (30 hari)` : ""}`, "Catat setiap setoran dan pembayaran di Laju, minimal 8 catatan sebulan."),
       ] },
       { id: "save", label: "Tabungan & ketahanan", parts: [
         P("Dana darurat", Math.min(1, months / 3) * 12, 12,
           months > 24 ? "Lebih dari 24 bulan pengeluaran" : `${months.toFixed(1).replace(".", ",")} bulan pengeluaran`, "Kumpulkan dana darurat sampai 3 bulan pengeluaran."),
         P("Tes guncangan Rp1 juta", Math.max({ ok: 5, partial: 3, borrow: 1 }[r.shock] || 0, emergency >= 1e6 ? 5 : emergency >= 5e5 ? 3 : 0), 5,
-          emergency >= 1e6 ? "Bisa — dana darurat ≥ Rp1 juta" : SHOCK_LABEL[r.shock] || "Belum diisi", "Bantalan Rp1 juta membuat biaya mendadak tidak perlu ditutup utang."),
+          emergency >= 1e6 ? "Bisa, dana darurat ≥ Rp1 juta" : SHOCK_LABEL[r.shock] || "Belum diisi", "Bantalan Rp1 juta membuat biaya mendadak tidak perlu ditutup utang."),
         P("Menabung rutin", Math.min(1, saveRate / 0.1) * 8, 8,
           `${rp(monthlySave)}/bln · ${pctCap(saveRate)} dari pendapatan${act.deposits > (Number(r.monthlySave) || 0) ? " · dari setoran tercatat" : ""}`, "Sisihkan rutin, targetnya 10% pendapatan."),
       ] },
@@ -615,14 +622,14 @@
       ] },
       { id: "plan", label: "Rencana & proteksi", parts: [
         P("BPJS Kesehatan", p.hasBpjsKes ? 6 : 0, 6, p.hasBpjsKes ? "Aktif" : "Belum", "BPJS Kesehatan adalah bantalan termurah saat sakit."),
-        P("BPJS Ketenagakerjaan", p.hasBpjsKet ? 5 : 0, 5, p.hasBpjsKet ? "Aktif" : "Belum", "Melindungi dari kecelakaan kerja; ada diskon iuran 50% untuk ojol."),
+        P("BPJS Ketenagakerjaan", p.hasBpjsKet ? 5 : 0, 5, p.hasBpjsKet ? "Aktif" : "Belum", "Melindungi dari kecelakaan kerja. Ojol dapat diskon iuran 50%."),
         P("Asuransi lain", p.hasInsurance ? 2 : 0, 2, p.hasInsurance ? "Ada" : "Tidak ada", "Opsional: asuransi kendaraan atau mikro."),
         P("Rekening bank", p.hasBank ? 4 : 0, 4, p.hasBank ? "Ada" : "Belum", "Rekening bank dibutuhkan untuk rekam jejak dan kredit resmi."),
         P("Tujuan yang jelas", r.primaryGoal ? (Number(r.goalAmount) > 0 ? 4 : 2) : 0, 4,
           r.primaryGoal ? (Number(r.goalAmount) > 0 ? `Ada target ${rp(Number(r.goalAmount))}` : "Ada, belum ada nominal") : "Belum ada",
           "Tetapkan tujuan utama beserta nominal dan tenggatnya."),
         P("Simpanan di tempat aman", safePlaces >= 2 ? 4 : safePlaces === 1 ? 2 : 0, 4,
-          `${safePlaces} tempat selain uang tunai`, "Simpan di rekening/e-wallet terpisah, bukan uang tunai di rumah."),
+          `${safePlaces} tempat selain uang tunai`, "Simpan di rekening/e-wallet terpisah. Uang tunai di rumah mudah terpakai."),
       ] },
     ];
     const pillars = groups.map(g => {
@@ -644,7 +651,7 @@
     const b = h.grade;
     const weakest = [...h.pillars].sort((x, y) => x.score - y.score)[0];
     return `<section class="card viz-card" aria-labelledby="score-h">
-      <div class="card-head"><h2 id="score-h">Skor kesehatan finansial</h2><p>Diperbarui otomatis setiap ada transaksi baru.</p></div>
+      <div class="card-head"><h2 id="score-h">Skor kesehatan finansial</h2></div>
       <div class="hero-top"><span class="hero-num">${h.total}<small>/100</small></span>${statusPill(b.id, b.label)}</div>
       <div class="sband" role="img" aria-label="Skor ${h.total} dari 100, kategori ${b.label}">
         <div class="sband-marker" style="left:${clamp(h.total, 0, 100)}%"></div>
@@ -652,13 +659,13 @@
         ${ticks([[0, "0"], [40, "40"], [60, "60"], [80, "80"], [100, "100"]])}
       </div>
       <div class="legend">${BANDS.map(x => `<span><i style="background:${x.color}"></i>${x.label}</span>`).join("")}</div>
-      <p class="hero-msg">Pilar terlemah Anda: <strong>${weakest.label} (${weakest.score})</strong>. ${weakest.tip}</p>
+      <p class="hero-msg">Paling lemah: <strong>${weakest.label}</strong> (${weakest.pts} dari ${weakest.max} poin). ${weakest.tip}</p>
     </section>`;
   }
 
   function vizPillars(h) {
     return `<section class="card viz-card" aria-labelledby="pil-h">
-      <div class="card-head"><h2 id="pil-h">Empat pilar kesehatan finansial</h2><p>Setiap pilar bernilai 25 poin, dihitung dari data Anda. Garis hitam = batas sehat 80%.</p></div>
+      <div class="card-head"><h2 id="pil-h">Empat pilar kesehatan finansial</h2><p>Tiap pilar maksimal 25 poin.</p></div>
       <div class="hbars">${h.pillars.map(p => {
         const b = band(p.score);
         return `<div>
@@ -700,9 +707,9 @@
     const line = (l) => `<li><span class="cf-l">${esc(l.label)} ${SRC_TAG[l.src]}<small>${esc(l.formula)}</small></span><b class="num">${rp(l.amount)}</b></li>`;
     const debtLines = c.debtMonthly > c.debtListed
       ? [{ label: "Dibayar lewat e-wallet", amount: c.debtMonthly, src: "verified", formula: `lebih besar dari daftar utang Anda (${rp(c.debtListed)}/bln), jadi angka e-wallet yang dipakai` }]
-      : S.debts.filter(debtOpen).map(d => ({ label: debtTypeLabel(d), amount: r1k(debtInstallment(d)), src: "self", formula: Number(d.months) > 0 ? `sisa ${rp(Number(d.remaining))} ÷ ${d.months} bulan` : `sisa ${rp(Number(d.remaining))} ÷ 12 bulan (perkiraan — lama cicilan belum diisi)` }));
+      : S.debts.filter(debtOpen).map(d => ({ label: debtTypeLabel(d), amount: r1k(debtInstallment(d)), src: "self", formula: Number(d.months) > 0 ? `sisa ${rp(Number(d.remaining))} ÷ ${d.months} bulan` : `sisa ${rp(Number(d.remaining))} ÷ 12 bulan (perkiraan, lama cicilan belum diisi)` }));
     return `<section class="card viz-card" aria-labelledby="cf-h">
-      <div class="card-head"><h2 id="cf-h">Arus kas per bulan</h2><p>Batang = seluruh pendapatan Anda per bulan, dibagi ke mana saja uangnya pergi.</p></div>
+      <div class="card-head"><h2 id="cf-h">Arus kas per bulan</h2></div>
       <div class="cf-top"><span>Pendapatan</span><b class="num">${rp(inc)}</b></div>
       <div class="cf-bar ${net < 0 ? "deficit" : ""}" ${net < 0 ? `style="--inc:${w(inc)}%"` : ""} role="img" aria-label="Pendapatan ${rp(inc)}: pengeluaran ${rp(exp)}${debt ? `, cicilan ${rp(debt)}` : ""}, ${net >= 0 ? `sisa ${rp(net)}` : `kurang ${rp(-net)}`}">
         ${segs.map(s => `<span style="width:${w(s.v)}%;background:${s.color}" data-tip="${s.label}: ${rp(s.v)} (${pct(inc > 0 ? s.v / inc : 0)} dari pendapatan)" tabindex="0"></span>`).join("")}
@@ -721,7 +728,7 @@
         ${debtLines.length ? `<p class="cf-h">Cicilan utang</p><ul>${debtLines.map(line).join("")}</ul>` : ""}
         <p class="cf-h">Sisa</p><ul><li><span class="cf-l">Pendapatan − pengeluaran − cicilan<small>${rp(inc)} − ${rp(exp)} − ${rp(debt)}</small></span><b class="num">${rp(net)}</b></li>
           <li><span class="cf-l">Porsi cicilan<small>${rp(debt)} ÷ ${rp(inc)}</small></span><b class="num">${pct(dsr)}</b></li></ul>
-        <p class="hint">Angka per bulan dibulatkan ke ribuan. 1 bulan dihitung ${String(WEEKS).replace(".", ",")} minggu.</p>
+        <p class="hint">1 bulan = ${String(WEEKS).replace(".", ",")} minggu.</p>
       </details>
     </section>`;
   }
@@ -731,49 +738,101 @@
     const col = { good: "var(--st-good)", warn: "var(--st-warn)", critical: "var(--st-critical)" }[st];
     const target1 = c.expense, gap = Math.max(0, target1 - S.resilience.savings);
     return `<section class="card viz-card" aria-labelledby="ef-h">
-      <div class="card-head"><h2 id="ef-h">Dana darurat</h2><p>Target aman: 3 bulan pengeluaran. Target pertama: 1 bulan.</p></div>
+      <div class="card-head"><h2 id="ef-h">Dana darurat</h2><p>Target: 3 bulan pengeluaran.</p></div>
       <div>
         <div class="kv"><span>Tabungan ${rp(S.resilience.savings)} ≈ <span class="num">${months > 24 ? "lebih dari 24" : months.toFixed(1).replace(".", ",")}</span> bulan pengeluaran</span>${statusPill(st, months < 1 ? "Belum aman" : months < 3 ? "Sebagian" : "Aman")}</div>
         <div class="meter" style="background:color-mix(in oklab, ${col} 20%, var(--card))" role="img" aria-label="Dana darurat ${months.toFixed(1)} dari target 3 bulan">
           <span class="meter-fill" style="width:${Math.max(0.8, (Math.min(months, 3) / 3) * 100)}%;background:${col}"></span><span class="meter-tick" style="left:33.33%"></span></div>
         ${ticks([[0, "0"], [33.33, `1 bulan · ${rp(target1)}`, "tgt"], [100, `3 bulan`]])}
       </div>
-      <p class="hint" style="font-size:.85rem">${gap > 0 ? `Kurang <strong>${rp(gap)}</strong> untuk mencapai target pertama.${S.resilience.monthlySave ? ` Dengan menyisihkan ${rp(S.resilience.monthlySave)}/bulan, butuh sekitar ${Math.ceil(gap / S.resilience.monthlySave)} bulan.` : ""}` : "Target pertama sudah tercapai — lanjut ke 3 bulan."}</p>
+      <p class="hint" style="font-size:.85rem">${gap > 0 ? `Kurang <strong>${rp(gap)}</strong> lagi untuk 1 bulan pengeluaran.${S.resilience.monthlySave ? ` ±${Math.ceil(gap / S.resilience.monthlySave)} bulan dengan setoran ${rpShort(S.resilience.monthlySave)}/bln.` : ""}` : "1 bulan pengeluaran sudah aman. Lanjut ke 3 bulan."}</p>
     </section>`;
   }
 
-  // Hasil verifikasi: berapa persen isian terbukti di e-wallet, status per item, dan pengecekan.
+  // Hasil verifikasi: porsi isian yang terbukti di e-wallet + hal yang perlu dicek.
+  // checks: true = daftar lengkap (Hasil), "summary" = satu baris (Dashboard), false = tanpa daftar.
   const CHECK_ICON = { ok: "good", warn: "serious", info: "warn" };
   function vizReliability(c, { checks = true } = {}) {
+    const list = checks ? dataChecks(c) : [];
+    const checkList = !list.length ? ""
+      : checks === "summary" ? `<p class="checks-sum">${ST_ICON.serious}<span>${list.length} hal perlu dicek. <a class="link-btn inline" href="${editUrl("keuangan")}">Cek di Profil</a></span></p>`
+      : `<ul class="checks">${list.map(k => `<li class="${k.lv}">${ST_ICON[CHECK_ICON[k.lv]]}<span>${esc(k.text)}</span></li>`).join("")}</ul>`;
+    if (!c.verified) {
+      return `<section class="card viz-card" aria-labelledby="rel-h">
+        <div class="card-head"><h2 id="rel-h">Verifikasi</h2></div>
+        <div class="kv" style="margin:0"><span>Belum ada e-wallet terhubung</span>${statusPill("critical", "Belum terverifikasi")}</div>
+        ${checkList}
+      </section>`;
+    }
     const row = (label, share, verifiedAmt, total) => {
       const p = Math.round(share * 100);
       return `<div class="src-row">
-        <div class="kv" style="margin:0"><span>${label}: <b class="num">${p}%</b> terverifikasi</span><span class="num src-amt">${rp(verifiedAmt)} dari ${rp(total)}</span></div>
-        <div class="stack100" role="img" aria-label="${label}: ${p}% terverifikasi, ${100 - p}% isian sendiri">${p > 0 ? `<span style="flex:${p};background:var(--viz-in)"></span>` : ""}${p < 100 ? `<span style="flex:${100 - p};background:var(--viz-self)"></span>` : ""}</div>
+        <div class="kv" style="margin:0"><span>${label} <b class="num">${p}%</b></span><span class="num src-amt">${rpShort(verifiedAmt)} dari ${rpShort(total)}</span></div>
+        <div class="stack100" role="img" aria-label="${label}: ${p}% terverifikasi">${p > 0 ? `<span style="flex:${p};background:var(--viz-in)"></span>` : ""}${p < 100 ? `<span style="flex:${100 - p};background:var(--viz-self)"></span>` : ""}</div>
       </div>`;
     };
-    const list = checks ? dataChecks(c) : [];
     const pIn = Math.round(c.shareIn * 100);
     const ch = channelStatus(c.agg);
-    const coverage = ch.chosen.length ? `<p class="hint" style="font-size:.82rem">Jalur uang Anda: ${ch.chosen.map(id => `${esc(channelLabel(id))}${ch.connected.includes(id) ? " ✓" : ""}`).join(", ")}. ${ch.connected.length ? `Terhubung: ${ch.connected.map(channelLabel).join(", ")}.` : "Belum ada yang terhubung."}</p>` : "";
+    const coverage = `<p class="hint">Terhubung: ${ch.connected.map(channelLabel).join(", ")}${ch.notConnected.length ? ` · Belum: ${ch.notConnected.map(channelLabel).join(", ")}` : ""}</p>`;
     const group = (g, title) => {
       const rows = c.items.filter(i => i.group === g);
       return rows.length ? `<p class="cf-h">${title}</p><ul class="vf-list">${rows.map(i => {
         const [st, stLabel] = (i.status === "over" || i.status === "missing") && i.reason === "bukan" ? ["warn", "Dikecualikan"] : V_STATUS[i.status];
-        return `<li><span class="vf-l"><b>${esc(i.label)}</b><small>isian ${i.lo !== i.hi ? `${rp(i.lo)}–${rp(i.hi)}` : rp(i.m)} · e-wallet ${rp(i.w)}${i.reason ? ` · ${REASON_LABEL(i.reason)}` : ""}${i.adjusted ? " · dipakai angka e-wallet" : ""}</small></span>${statusPill(st, stLabel)}</li>`;
+        return `<li><span class="vf-l"><b>${esc(i.label)}</b><small>isian ${i.lo !== i.hi ? `${rpShort(i.lo)}–${rpShort(i.hi)}` : rpShort(i.m)} · e-wallet ${rpShort(i.w)}${i.reason && i.reason !== "bukan" ? ` · ${REASON_LABEL(i.reason)}` : ""}</small></span>${statusPill(st, stLabel)}</li>`;
       }).join("")}</ul>` : "";
     };
     return `<section class="card viz-card" aria-labelledby="rel-h">
-      <div class="card-head"><h2 id="rel-h">Hasil verifikasi</h2><p>Isian Anda dicocokkan dengan transaksi e-wallet. Terverifikasi = bagian isian yang terbukti di e-wallet; sisanya lewat tunai, rekening bank, atau e-wallet lain.</p></div>
-      <div class="kv" style="margin:0"><span>Keterandalan data</span>${statusPill(pIn >= 70 ? "good" : pIn > 0 ? "warn" : "critical", pIn >= 70 ? "Kuat" : pIn > 0 ? "Sebagian" : "Belum terverifikasi")}</div>
+      <div class="card-head"><h2 id="rel-h">Verifikasi</h2><p>Bagian isian yang terbukti di e-wallet.</p></div>
+      <div class="kv" style="margin:0"><span>Keterandalan data</span>${statusPill(pIn >= 70 ? "good" : "warn", pIn >= 70 ? "Kuat" : "Sebagian")}</div>
       ${row("Pendapatan", c.shareIn, c.verifiedIn, c.income)}
       ${row("Pengeluaran", c.shareOut, c.verifiedOut, c.expMid)}
-      <div class="legend"><span><i style="background:var(--viz-in)"></i>Terbukti di e-wallet</span><span><i style="background:var(--viz-self)"></i>Isian sendiri (tunai / jalur lain)</span></div>
       ${coverage}
-      ${c.items.length ? `<details class="cf-calc"><summary>Rincian per item (${c.items.length})</summary>${group("in", "Pendapatan")}${group("out", "Pengeluaran")}${group("debt", "Cicilan")}</details>` : ""}
-      ${list.length ? `<ul class="checks">${list.map(k => `<li class="${k.lv}">${ST_ICON[CHECK_ICON[k.lv]]}<span>${esc(k.text)}</span></li>`).join("")}</ul>` : ""}
+      ${checkList}
+      ${checks === true && c.items.length ? `<details class="cf-calc"><summary>Rincian per item (${c.items.length})</summary>${group("in", "Pendapatan")}${group("out", "Pengeluaran")}${group("debt", "Cicilan")}</details>` : ""}
     </section>`;
   }
+
+  // Kotak info dipindah ke tombol "Info" di judul kartu / langkah supaya tidak memotong alur isian.
+  // Tetap di tempat: error (merah) dan catatan yang berisi tombol aksi (jadi teks ringan tanpa kotak),
+  // serta catatan yang menjadi satu-satunya isi kartu (jadi teks biasa).
+  const INFO_OPEN = new Set();
+  function tuckNotes(root, prefix = "") {
+    const hosts = new Map();
+    root.querySelectorAll(".note").forEach(n => {
+      if (n.classList.contains("danger") || n.closest(".info-pop")) return;
+      if (n.querySelector("button, a")) { n.classList.add("inline"); return; }
+      const card = n.closest(".card");
+      const head = card?.querySelector(":scope > .card-head");
+      if (card && [...card.children].every(ch => ch === n || ch === head)) { n.classList.add("plain"); return; }
+      const host = head || root.querySelector(".step-desc");
+      if (!host) { n.classList.add("plain"); return; }
+      if (!hosts.has(host)) hosts.set(host, []);
+      hosts.get(host).push(n);
+    });
+    let k = 0;
+    for (const [host, notes] of hosts) {
+      const key = `${prefix}:${k++}`, id = `info-${String(prefix).replace(/[^\w-]/g, "")}-${k}`, open = INFO_OPEN.has(key);
+      const btn = document.createElement("button");
+      btn.type = "button"; btn.className = "info-dot"; btn.dataset.infoKey = key;
+      btn.setAttribute("aria-expanded", String(open)); btn.setAttribute("aria-controls", id);
+      btn.innerHTML = `${ICON.info}<span>Info${notes.length > 1 ? ` (${notes.length})` : ""}</span>`;
+      const pop = document.createElement("div");
+      pop.className = "info-pop"; pop.id = id; pop.hidden = !open;
+      for (const n of notes) {
+        const c = n.cloneNode(true); c.querySelectorAll("svg").forEach(x => x.remove());
+        const p = document.createElement("p"); p.innerHTML = c.innerHTML; pop.append(p); n.remove();
+      }
+      (host.matches(".card-head") ? host.querySelector("h2") || host : host).append(btn);
+      host.after(pop);
+    }
+  }
+  document.addEventListener("click", (e) => {
+    const b = e.target.closest(".info-dot"); if (!b) return;
+    const pop = document.getElementById(b.getAttribute("aria-controls")); if (!pop) return;
+    const open = pop.hidden;
+    pop.hidden = !open; b.setAttribute("aria-expanded", String(open));
+    open ? INFO_OPEN.add(b.dataset.infoKey) : INFO_OPEN.delete(b.dataset.infoKey);
+  });
 
   function toast(msg) {
     const t = $("#toast"); t.textContent = msg; t.classList.add("show");
@@ -863,7 +922,7 @@ income: { perPlatform: { gojek: 160000, grab: 110000 }, bonus: 400000, tips: 150
   };
 
   // ---------- utang ----------
-  // Perkiraan bunga (% per bulan) bila kolom bunga kosong — hanya untuk urutan & simulasi.
+  // Perkiraan bunga (% per bulan) bila kolom bunga kosong, hanya untuk urutan & simulasi.
   // Pinjol resmi dibatasi OJK maks. 0,1%/hari (±3%/bln) untuk konsumtif mulai 2026.
   const DEBT_RATE_GUESS = { Pinjol: 3, Paylater: 3, Rentenir: 10 };
   const debtRate = (d) => (Number(d.rate) > 0 ? Number(d.rate) : DEBT_RATE_GUESS[d.type] || 0);
@@ -876,12 +935,12 @@ income: { perPlatform: { gojek: 160000, grab: 110000 }, bonus: 400000, tips: 150
   // avalanche = bunga termahal dulu (paling hemat); snowball = sisa terkecil dulu (paling memotivasi)
   const DEBT_METHODS = {
     avalanche: { label: "Bunga termahal dulu", why: "Paling hemat bunga.", order: (a, b) => debtRate(b) - debtRate(a) || Number(a.remaining) - Number(b.remaining) },
-    snowball: { label: "Sisa terkecil dulu", why: "Cepat terasa lunas satu per satu — riset Kellogg menemukan cara ini lebih sering dituntaskan.", order: (a, b) => Number(a.remaining) - Number(b.remaining) },
+    snowball: { label: "Sisa terkecil dulu", why: "Utang yang lunas satu per satu lebih cepat terasa. Riset Kellogg menemukan cara ini lebih sering dituntaskan.", order: (a, b) => Number(a.remaining) - Number(b.remaining) },
   };
   const debtOrder = (debts) => [...debts].sort(DEBT_METHODS[S.milestones.debtMethod || "avalanche"].order);
 
   // Simulasi per bulan: bunga berjalan, semua cicilan dibayar, dana tambahan ke urutan
-  // nomor 1; cicilan utang yang sudah lunas ikut dialihkan ke utang berikutnya.
+  // nomor 1, cicilan utang yang sudah lunas ikut dialihkan ke utang berikutnya.
   function simulatePayoff(debts, extra = 0, maxMonths = 120) {
     const cmp = DEBT_METHODS[S.milestones.debtMethod || "avalanche"].order;
     const list = debts.filter(debtOpen).map(d => ({ d, b: Number(d.remaining), r: debtRate(d) / 100, pay: debtInstallment(d) }));
@@ -901,7 +960,7 @@ income: { perPlatform: { gojek: 160000, grab: 110000 }, bonus: 400000, tips: 150
   }
 
   // ---------- tabungan ----------
-  // Rata-rata pendapatan ojol per hari narik — batas atas slider setoran harian.
+  // Rata-rata pendapatan ojol per hari narik, batas atas slider setoran harian.
   function dailyAppIncome(c) {
     const fromApps = S.profile.platforms.reduce((s, id) => s + (Number(S.income.perPlatform[id]) || 0), 0);
     return fromApps || Number(S.income.weekAvg) || (c.income / Math.max(1, S.profile.daysPerWeek * WEEKS));
@@ -966,11 +1025,11 @@ income: { perPlatform: { gojek: 160000, grab: 110000 }, bonus: 400000, tips: 150
       w = hasHigh ? { emergency: 0.7, debt: 0.3 } : hasDebt ? { emergency: 0.8, debt: 0.2 } : { emergency: 0.9, goal: 0.1 };
     } else if (hasHigh) {
       phase = "serang"; title = "Serang utang bunga tinggi";
-      why = "Bunga pinjol/paylater bisa ±3% per bulan — melunasinya sama dengan 'untung' ±36% setahun, lebih besar dari tabungan mana pun.";
+      why = "Bunga pinjol/paylater bisa ±3% per bulan. Melunasinya sama dengan 'untung' ±36% setahun, lebih besar dari tabungan mana pun.";
       w = { debt: 0.7, emergency: 0.2, goal: 0.1 };
     } else if (!full) {
       phase = "darurat"; title = "Lengkapi dana darurat 3 bulan";
-      why = "Pendapatan ojol naik-turun; dana darurat 3 bulan menjaga Anda tetap aman saat order sepi panjang atau motor rusak.";
+      why = "Pendapatan ojol naik-turun. Dana darurat 3 bulan menjaga Anda tetap aman saat order sepi panjang atau motor rusak.";
       w = hasDebt ? { emergency: 0.6, debt: 0.2, goal: 0.2 } : { emergency: 0.6, goal: 0.4 };
     } else {
       phase = "tujuan"; title = "Kejar tujuan utama";
@@ -1012,13 +1071,13 @@ income: { perPlatform: { gojek: 160000, grab: 110000 }, bonus: 400000, tips: 150
 
   // ---------- definisi langkah ----------
   const GOAL_STEPS = {
-    lunas: { title: "Tujuan utama: bebas semua utang", caption: "Semua utang konsumtif lunas — tujuan yang Anda pilih.", kind: "debtall" },
+    lunas: { title: "Tujuan utama: bebas semua utang", caption: "Semua utang konsumtif lunas, sesuai tujuan yang Anda pilih.", kind: "debtall" },
     darurat: { title: "Tujuan utama: dana darurat 6 bulan", caption: "Bantalan penuh untuk pendapatan yang naik-turun.", kind: "emergency6" },
     kendaraan: { title: "Tujuan utama: kendaraan milik sendiri", caption: "Dana untuk uang muka atau pelunasan kendaraan.", kind: "pot" },
     usaha: { title: "Tujuan utama: modal usaha sampingan", caption: "Modal awal supaya pemasukan tidak hanya dari narik.", kind: "pot" },
     anak: { title: "Tujuan utama: biaya pendidikan anak", caption: "Dana sekolah yang disiapkan sebelum dibutuhkan.", kind: "pot" },
     rumah: { title: "Tujuan utama: rumah / renovasi", caption: "Dana untuk rumah atau perbaikan rumah.", kind: "pot" },
-    "": { title: "Tujuan utama: tabungan tujuan", caption: "Pilih tujuan utama di Ubah data → Ketahanan supaya langkah ini lebih tepat.", kind: "pot" },
+    "": { title: "Tujuan utama: tabungan tujuan", caption: "Pilih tujuan utama di Profil › Tujuan supaya langkah ini lebih tepat.", kind: "pot" },
   };
 
   const fmtMonths = (m) => `${m.toFixed(1).replace(".", ",")} bln`;
@@ -1064,7 +1123,7 @@ income: { perPlatform: { gojek: 160000, grab: 110000 }, bonus: 400000, tips: 150
       },
       {
         id: "bantalan", title: "Bantalan pertama Rp1 juta", pillar: "Tabungan & ketahanan", tool: "savings",
-        caption: "Uang khusus untuk servis mendadak atau motor rusak — supaya tidak perlu pinjol.", explain: "dana darurat ÷ Rp1.000.000.",
+        caption: "Uang khusus untuk servis mendadak atau motor rusak, supaya Anda tidak perlu pinjol.", explain: "dana darurat ÷ Rp1.000.000.",
         ...savingsStep(x, 1e6, "Rp1.000.000"),
       },
       {
@@ -1085,7 +1144,7 @@ income: { perPlatform: { gojek: 160000, grab: 110000 }, bonus: 400000, tips: 150
       },
       {
         id: "rutin", title: "Menabung rutin 10% pendapatan", pillar: "Tabungan & ketahanan", tool: "monthly",
-        caption: "Menabung jadi kebiasaan otomatis, bukan sisa-sisa.", explain: "disisihkan per bulan ÷ 10% pendapatan.",
+        caption: "Anda menyisihkan tabungan di awal bulan, tidak menunggu sisa.", explain: "disisihkan per bulan ÷ 10% pendapatan.",
         progress: t10 > 0 ? Math.round((x.monthlySave / t10) * 100) : 0,
         cur: { label: "Disisihkan per bulan", value: rp(x.monthlySave) }, tgt: { label: "Target (10%)", value: `${rp(t10)} / bln` },
         gap: x.monthlySave < t10 ? `Tambah ${rp(t10 - x.monthlySave)} per bulan` : "",
@@ -1199,8 +1258,8 @@ income: { perPlatform: { gojek: 160000, grab: 110000 }, bonus: 400000, tips: 150
   }
 
   // =====================================================================
-  // Konteks untuk analisis AI (Claude API) — lihat docs/ai-data-contract.md
-  // Prinsip: hanya data yang dibutuhkan untuk membimbing keuangan; TANPA data
+  // Konteks untuk analisis AI (Claude API), lihat docs/ai-data-contract.md
+  // Prinsip: hanya data yang dibutuhkan untuk membimbing keuangan, TANPA data
   // identitas (nama, nomor HP, username, password, area narik detail).
   // =====================================================================
   function buildAIContext() {

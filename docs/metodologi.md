@@ -19,7 +19,7 @@ Di Profil, pengguna memilih **lewat mana saja uangnya masuk & keluar**: GoPay, O
 
 | Status | Kondisi | Yang diminta dari pengguna |
 |---|---|---|
-| Cocok | W ≥ 90% isian (atau masih di dalam rentang) | — |
+| Cocok | W ≥ 90% isian (atau masih di dalam rentang) | - |
 | Sebagian terverifikasi | W < isian | jelaskan selisihnya: tunai / rekening bank / e-wallet lain (nama yang belum terhubung) / perkiraan terlalu tinggi |
 | Tidak lewat e-wallet | W = 0 | jelaskan jalurnya (sama seperti di atas) |
 | Isian terlalu kecil | W > isian | "Sesuaikan isian ke Rp W" atau "bukan milik saya (titipan / pinjaman)" |
@@ -61,13 +61,13 @@ Setiap pilar bernilai 25 poin. Setiap komponen menampilkan poin, nilai sekarang,
 
 | Pilar | Komponen | Poin | Aturan |
 |---|---|---|---|
-| Arus kas | Sisa uang per bulan | 15 | sisa ≥10% pendapatan = penuh; minus mengurangi poin |
+| Arus kas | Sisa uang per bulan | 15 | sisa ≥10% pendapatan = penuh. Minus mengurangi poin |
 | | Kestabilan pendapatan | 5 | stabil 5 · naik-turun 3 · fluktuatif 1 |
 | | Kebiasaan mencatat | 5 | jawaban onboarding **atau** jumlah catatan di Laju 30 hari terakhir (≥8 → 5, ≥3 → 3), mana yang lebih tinggi |
 | Tabungan & ketahanan | Dana darurat | 12 | dana darurat ÷ 3 bulan pengeluaran |
 | | Tes guncangan Rp1 juta | 5 | jawaban onboarding **atau** dana darurat sekarang (≥Rp1 jt → 5, ≥Rp500 rb → 3) |
-| | Menabung rutin | 8 | setoran per bulan ÷ 10% pendapatan; setoran yang dicatat di Laju ikut dihitung |
-| Utang | Porsi cicilan (DSR) | 12 | ≤10% penuh; turun linear sampai 0 di 50% |
+| | Menabung rutin | 8 | setoran per bulan ÷ 10% pendapatan. Setoran yang dicatat di Laju ikut dihitung |
+| Utang | Porsi cicilan (DSR) | 12 | ≤10% penuh. Turun linear sampai 0 di 50% |
 | | Utang bunga tinggi | 8 | tidak ada 8 · satu 3 · lebih dari satu 0 |
 | | Total utang | 5 | total utang ÷ pendapatan setahun ≤30% penuh |
 | Rencana & proteksi | BPJS Kesehatan | 6 | aktif / belum |
@@ -93,13 +93,13 @@ Langkah 7 mengikuti **tujuan utama** yang dipilih di onboarding (Ketahanan → T
 | 6 | Menabung rutin 10% | setoran/bulan ≥ 10% pendapatan |
 | 7 | Tujuan utama | *bebas utang* → semua utang lunas · *dana darurat* → 6 bulan · *kendaraan/usaha/anak/rumah* → tabungan tujuan (pot terpisah) mencapai nominal sebelum tenggat |
 | 8 | Siap ajukan kredit resmi | skor ≥70, riwayat terverifikasi 6 bulan, tanpa utang bunga tinggi, DSR ≤30% |
-| ★ | Rapor & kesimpulan | selalu bisa dibuka; menjadi "rapor akhir" saat 1–8 selesai |
+| ★ | Rapor & kesimpulan | selalu bisa dibuka. Menjadi "rapor akhir" saat 1–8 selesai |
 
 Progres 100% hanya muncul bila **semua** syarat wajib terpenuhi, jadi pembulatan tidak bisa membuat langkah tampak selesai.
 
 ### Rencana setoran adaptif
 
-Slider "Setor per hari narik" bergerak dari **Rp1.000** sampai **rata-rata pendapatan ojol per hari** (jumlah pendapatan per aplikasi; kalau kosong, dipakai rata-rata mingguan atau pendapatan bulanan ÷ hari kerja), dengan langkah Rp1.000. Tombol cepat 5% / 10% / 20% dari pendapatan harian. Nilai awalnya diambil dari pembagian sisa uang bulan ini.
+Slider "Setor per hari narik" bergerak dari **Rp1.000** sampai **rata-rata pendapatan ojol per hari** (jumlah pendapatan per aplikasi. Kalau kosong, dipakai rata-rata mingguan atau pendapatan bulanan ÷ hari kerja), dengan langkah Rp1.000. Tombol cepat 5% / 10% / 20% dari pendapatan harian. Nilai awalnya diambil dari pembagian sisa uang bulan ini.
 
 ## 4. Jalur paralel: pelunasan utang
 
@@ -136,7 +136,7 @@ Tujuan utama menggeser porsi (kecuali di fase bantalan):
 
 Setiap porsi juga ditampilkan **per hari narik**.
 
-Urutan "bantalan kecil dulu, baru serang utang" sengaja dipilih. Survei IDEAS (2026) mencatat 91% driver berutang dan 43% memakai pinjol; tanpa bantalan, satu biaya mendadak biasanya ditutup pinjol baru.
+Urutan "bantalan kecil dulu, baru serang utang" sengaja dipilih. Survei IDEAS (2026) mencatat 91% driver berutang dan 43% memakai pinjol. Tanpa bantalan, satu biaya mendadak biasanya ditutup pinjol baru.
 
 ## 6. Rapor & kesimpulan
 
@@ -157,17 +157,17 @@ Kesimpulan otomatis ini adalah lapisan dasar yang selalu tersedia. Nantinya Clau
 
 ## 7. Sumber
 
-- Financial Health Network — FinHealth Score methodology: https://finhealthnetwork.org/score/score-methodology/
+- Financial Health Network: FinHealth Score methodology: https://finhealthnetwork.org/score/score-methodology/
 - FinHealth Score Toolkit (2021): https://finhealthnetwork.org/wp-content/uploads/2021/11/FinHealthScoreToolkit-2021.pdf
-- UNSGSA — Measuring Financial Health: https://www.unsgsa.org/sites/default/files/resources-files/2021-11/Measuring-Financial-Health-note-v2.pdf
-- Brookings — Measuring the financial health of Americans: https://www.brookings.edu/articles/measuring-the-financial-health-of-americans/
+- UNSGSA: Measuring Financial Health: https://www.unsgsa.org/sites/default/files/resources-files/2021-11/Measuring-Financial-Health-note-v2.pdf
+- Brookings: Measuring the financial health of Americans: https://www.brookings.edu/articles/measuring-the-financial-health-of-americans/
 - OJK batasi utang pinjol maksimal 30% penghasilan (CNN Indonesia, Jan 2026): https://www.cnnindonesia.com/ekonomi/20260112163314-78-1316215/ojk-batasi-utang-pinjol-maksimal-30-persen-dari-penghasilan
 - OJK perketat aturan pinjol (IDX Channel): https://www.idxchannel.com/banking/ojk-perketat-aturan-pinjol-utang-dibatasi-30-persen-dari-penghasilan
 - Diskon 50% iuran BPJS Ketenagakerjaan ojol hingga Maret 2027 (detikFinance): https://finance.detik.com/moneter/d-8340262/kabar-baik-buat-ojol-iuran-bpjs-ketenagakerjaan-diskon-50-hingga-maret-2027
 - Paket ekonomi 2025: iuran BPJSTK ojol (Bisnis): https://ekonomi.bisnis.com/read/20250916/12/1911619/paket-ekonomi-2025-ojol-cukup-bayar-iuran-bpjstk-rp10800
 - Survei IDEAS: 91% pengemudi ojol terjerat utang (Republika): https://ekonomi.republika.co.id/berita/tm6fwv423/survei-ideas-91-persen-pengemudi-ojol-terjerat-utang
-- Kellogg School — The snowball approach to debt: https://www.kellogg.northwestern.edu/news_articles/2012/snowball-approach.aspx
-- PayPal — How to budget with irregular income: https://www.paypal.com/us/money-hub/article/how-to-budget-with-irregular-income
+- Kellogg School: The snowball approach to debt: https://www.kellogg.northwestern.edu/news_articles/2012/snowball-approach.aspx
+- PayPal: How to budget with irregular income: https://www.paypal.com/us/money-hub/article/how-to-budget-with-irregular-income
 - Emergency fund with irregular income: https://jobble.com/articles/building-an-emergency-fund-with-irregular-income
 
 Nominal iuran dan aturan bisa berubah. Cek kanal resmi OJK dan BPJS sebelum dipakai di produksi.

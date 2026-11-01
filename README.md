@@ -1,4 +1,4 @@
-# Laju — prototipe
+# Laju: prototipe
 
 Onboarding kesehatan finansial untuk pengemudi ojol, dengan penghubungan e-wallet lewat open finance.
 
@@ -9,7 +9,7 @@ python server.py
 ```
 
 Buka http://127.0.0.1:5174 (Oracle memakai 5173, jadi keduanya bisa jalan bersamaan). Tidak perlu install apa pun (Python 3.10+ saja).
-Halaman harus dibuka lewat server ini; membuka file HTML langsung membuat penghubungan e-wallet tidak jalan.
+Halaman harus dibuka lewat server ini. Membuka file HTML langsung membuat penghubungan e-wallet tidak jalan.
 
 ## Struktur
 
@@ -17,8 +17,8 @@ Halaman harus dibuka lewat server ini; membuka file HTML langsung membuat penghu
 |---|---|
 | `public/` | Halaman web (landing, onboarding, aplikasi, halaman penyedia simulasi) |
 | `public/core.js` | Logika bersama: data acuan, state, skor kesehatan (4 pilar ala FinHealth, live), tangga milestone (`buildMilestones`), jalur utang (`debtLane`), pembagian sisa uang (`allocation`), catatan + urungkan (`recordChange`/`undoChange`), konteks AI (`buildAIContext`) |
-| `public/onboarding.html` + `onboarding.js` | Wizard 7 atau 8 langkah sampai halaman Hasil (langkah E-wallet hanya muncul kalau dipilih). Isian manual selalu wajib dan jadi dasar hitungan; e-wallet opsional untuk memverifikasi isian (selisih dijelaskan: tunai, rekening bank, e-wallet lain) |
-| `public/app.html` + `app-page.js` | Setelah onboarding: tab **Dashboard**, **Tangga** (`#milestone/<id>`, jalur utang di `#milestone/utang`), dan **Rapor** (`#rapor`). Setiap perubahan data lewat konfirmasi dan bisa diurungkan |
+| `public/onboarding.html` + `onboarding.js` | Wizard 7 atau 8 langkah sampai halaman Hasil (langkah E-wallet hanya muncul kalau dipilih). Isian manual selalu wajib dan jadi dasar hitungan. E-wallet opsional untuk memverifikasi isian (selisih dijelaskan: tunai, rekening bank, e-wallet lain) |
+| `public/app.html` + `app-page.js` | Setelah onboarding: tab bawah **Beranda**, **Tangga**, **+ Catat**, **Rapor**, **Profil**. Profil = data yang jarang berubah (tiap bagian membuka `onboarding.html?edit=<bagian>` dengan tombol Batal/Simpan). + Catat = kejadian yang memindahkan uang (setor, ambil tabungan, bayar utang), selalu lewat konfirmasi dan bisa diurungkan. Tangga hanya menampilkan progres dan rencana |
 | `docs/metodologi.md` | Cara skor, tangga, jalur utang, pembagian uang, dan rapor dihitung + sumber riset |
 | `docs/ai-data-contract.md` | Data apa yang dikirim ke Claude API (dan yang tidak), audit isian onboarding, rancangan integrasi |
 | `public/components.css` | Komponen v3: pencarian kota, slider rentang, kalender, grafik halaman Hasil (warna grafik lolos validator buta warna) |
@@ -26,7 +26,7 @@ Halaman harus dibuka lewat server ini; membuka file HTML langsung membuat penghu
 | `server.py` | Menyajikan halaman + API `/api/wallets/*`. Kunci API dan token akun hanya ada di sini |
 | `openfinance/base.py` | Kontrak `Provider` yang harus dipenuhi penyedia mana pun |
 | `openfinance/mock.py` | Penyedia simulasi (dipakai sekarang) |
-| `openfinance/live.py` | **Penyedia asli — 4 metode yang masih TODO** |
+| `openfinance/live.py` | **Penyedia asli, 4 metode yang masih TODO** |
 | `openfinance/categorize.py` | Memisahkan pencairan aplikasi, transfer antar-akun, cicilan, dan kategori pengeluaran |
 
 ## Alur penghubungan e-wallet
