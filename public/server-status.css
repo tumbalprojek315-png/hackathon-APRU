@@ -1,0 +1,68 @@
+/* LIVE / OFFLINE pill (from Oracle).
+   Uses the project's own tokens when they exist; the fallbacks keep it working
+   in a project without them. Map these to the project's palette:
+     --live       green for LIVE      (dark theme #3ee07f, light theme #0a6b31)
+     --offline    red for OFFLINE     (dark theme #ff5c6c, light theme #b01f2d)
+     --ink-3      muted text for CHECKING
+     --radius-pill */
+.server-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  height: 24px;
+  padding: 0 11px 0 9px;
+  border-radius: var(--radius-pill, 999px);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  white-space: nowrap;
+  color: var(--ss-color, var(--ink-3, #94a1c2));
+  background: color-mix(in srgb, var(--ss-color, var(--ink-3, #94a1c2)) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--ss-color, var(--ink-3, #94a1c2)) 40%, transparent);
+  transition: color 0.2s, background 0.2s, border-color 0.2s;
+  cursor: default;
+  user-select: none;
+}
+.server-status[data-state='live'] {
+  --ss-color: var(--live, #3ee07f);
+}
+.server-status[data-state='offline'] {
+  --ss-color: var(--offline, #ff5c6c);
+}
+.ss-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: currentColor;
+  opacity: 0.55;
+}
+/* One blink = one finished server check (added by server-status.js). */
+.ss-dot.blink {
+  animation: ss-blink 0.7s ease-out;
+}
+@keyframes ss-blink {
+  0% {
+    opacity: 1;
+    transform: scale(1.5);
+    box-shadow: 0 0 0 0 currentColor, 0 0 10px currentColor;
+  }
+  100% {
+    opacity: 0.55;
+    transform: scale(1);
+    box-shadow: 0 0 0 7px transparent, 0 0 0 transparent;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  /* keep a visible (non-moving) flash so each check is still shown */
+  .ss-dot.blink {
+    animation: ss-flash 0.7s steps(1) !important;
+  }
+  @keyframes ss-flash {
+    0% {
+      opacity: 1;
+    }
+    100% {
+      opacity: 0.55;
+    }
+  }
+}

@@ -1,0 +1,45 @@
+/* Laju — kunci tampilan potret.
+   Laju dirancang untuk HP. Di layar mana pun (HP, tablet, desktop, fullscreen)
+   halaman tetap satu kolom selebar HP di tengah layar, dengan susunan yang
+   sama persis seperti di HP. File ini dimuat PALING AKHIR supaya menimpa
+   aturan layar lebar (@media min-width) di styles.css, components.css, app.css. */
+
+:root { --phone: 440px; }
+
+/* satu kolom selebar HP, di tengah */
+.wrap, .wrap.wide { width: min(100% - 32px, var(--phone)); }
+
+/* grid tetap seperti di HP, tidak menyebar jadi 2–4 kolom */
+.grid2, .grid3, .wallet-grid, .cat-body, .facts,
+.dash-grid, .dash-cols, .hero, .sections, .band { grid-template-columns: 1fr; }
+.optgrid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+
+/* ukuran huruf memakai nilai HP, tidak membesar mengikuti lebar layar */
+.step-title { font-size: 1.6rem; }
+.hero-num { font-size: 3.9rem; }
+.statrow .stat b { font-size: .95rem; }
+.hero { padding: 40px 0 48px; }
+.hero h1 { font-size: 2.2rem; }
+.band { padding: 28px; }
+.band h2 { font-size: 1.5rem; }
+
+/* bar bawah onboarding: susunan HP */
+.bottom-hint { display: none; }
+.bottom-row { justify-content: space-between; }
+
+/* dialog: lembar dari bawah selebar kolom HP */
+dialog.sheet { margin: auto auto 0; width: min(100%, calc(var(--phone) + 32px)); max-width: 100%; border-radius: 1.6rem 1.6rem 0 0; }
+.sheet-actions .btn { flex: 1; }
+
+/* halaman aplikasi: tab di baris kedua, tombol aksi ringkas */
+.app-top { display: grid; grid-template-columns: 1fr auto; }
+.navtabs { grid-column: 1 / -1; order: 3; }
+.navtab { flex: 1; justify-content: center; }
+.app-actions .ghost-btn { padding: 0 8px; font-size: .75rem; }
+
+/* penanda tangga: hanya nomor, tanpa label (label muncul lewat tooltip) */
+.mtrack .lbl { display: none; }
+.mtrack .node { width: 30px; height: 30px; font-size: .76rem; }
+.mtrack li::before { top: 14px; }
+.mtrack.mini .node { width: 28px; height: 28px; }
+.mtrack.mini li::before { top: 13px; }

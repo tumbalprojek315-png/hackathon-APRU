@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="id">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Daftar — Laju</title>
+  <meta name="description" content="Onboarding Laju: susun gambaran kesehatan finansial Anda sebagai pengemudi ojol.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="components.css">
+  <link rel="stylesheet" href="server-status.css">
+  <link rel="stylesheet" href="portrait.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="wrap">
+      <div class="topbar-row">
+        <div class="brand-group">
+          <a class="brand" href="index.html" aria-label="Laju — beranda">
+            <span class="brand-mark" aria-hidden="true">
+              <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12h4l3 7 4-14 3 7h4"/></svg>
+            </span>
+            Laju
+          </a>
+          <div id="serverStatus" class="server-status" data-state="checking" role="status" aria-live="polite"></div>
+        </div>
+        <div style="display:flex;gap:4px">
+          <button class="ghost-btn" id="demoBtn" type="button">
+            <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m12 3-1.9 5.8L4 10.7l5.1 3.6L7.2 21 12 17.3 16.8 21l-1.9-6.7 5.1-3.6-6.1-1.9z"/></svg>
+            Isi contoh
+          </button>
+          <button class="ghost-btn" id="resetBtn" type="button" title="Hapus semua isian">Mulai ulang</button>
+        </div>
+      </div>
+      <div class="progress" role="progressbar" aria-label="Kemajuan pendaftaran" aria-valuemin="0" aria-valuemax="100"><i id="progressBar"></i></div>
+      <nav class="pills" id="pills" aria-label="Langkah pendaftaran"></nav>
+    </div>
+  </header>
+
+  <main>
+    <div class="wrap" id="step" tabindex="-1"></div>
+  </main>
+
+  <div class="bottombar">
+    <div class="wrap bottom-row">
+      <button class="btn secondary sm" id="backBtn" type="button">
+        <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 12H5m7 7-7-7 7-7"/></svg>
+        Kembali
+      </button>
+      <p class="bottom-hint" id="hint" aria-live="polite"></p>
+      <button class="btn sm" id="nextBtn" type="button">
+        <span id="nextLabel">Lanjut</span>
+        <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14m-7-7 7 7-7 7"/></svg>
+      </button>
+    </div>
+  </div>
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+  <dialog class="sheet" id="consentDlg" aria-labelledby="consentTitle"></dialog>
+  <dialog class="sheet" id="askDlg" aria-labelledby="askTitle"></dialog>
+  <dialog class="sheet" id="calDlg" aria-labelledby="calTitle"></dialog>
+  <dialog class="sheet" id="confirmDlg" aria-labelledby="confirmTitle"></dialog>
+  <div class="tip" id="tip" role="tooltip"></div>
+
+  <script src="core.js"></script>
+  <script src="onboarding.js"></script>
+  <script type="module">
+    import { startServerStatus } from "./server-status.js";
+    startServerStatus(document.getElementById("serverStatus"), {
+      wsPath: null,   // server Python ini tanpa WebSocket: cukup ping /__health tiap 2 detik
+      labels: { live: "LIVE", offline: "OFFLINE", checking: "MENGECEK" },
+      titles: {
+        live: (ms, time) => `Server berjalan · menjawab dalam ${ms} md · dicek ${time}`,
+        offline: (reason, time) => `Server tidak menjawab${reason ? ` (${reason})` : ""} · dicek ${time}`,
+      },
+    });
+  </script>
+</body>
+</html>

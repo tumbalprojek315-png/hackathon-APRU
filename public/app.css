@@ -1,0 +1,340 @@
+/* Laju — halaman aplikasi (Dashboard & Tangga milestone) */
+
+body.app main { padding: 8px 0 72px; }
+#view:focus { outline: none; }
+
+/* ---------- top bar: brand · tabs · actions ---------- */
+.app-top { display: flex; align-items: center; gap: 8px 16px; padding: 12px 0; flex-wrap: wrap; }
+.app-top .brand-group { margin-right: auto; }
+.navtabs { display: flex; gap: 6px; }
+.navtab { display: inline-flex; align-items: center; min-height: 40px; padding: 0 16px; border-radius: 99px; font-size: .85rem; font-weight: 700; color: var(--muted-fg); text-decoration: none; white-space: nowrap; }
+.navtab:hover { background: var(--secondary); color: var(--fg); }
+.navtab[aria-current="page"] { background: var(--fg); color: var(--bg); }
+.app-actions { display: flex; gap: 2px; }
+.app-actions .ghost-btn { text-decoration: none; }
+@media (max-width: 759px) {
+  .app-top { display: grid; grid-template-columns: 1fr auto; }
+  .navtabs { grid-column: 1 / -1; order: 3; }
+  .navtab { flex: 1; justify-content: center; }
+  .app-actions .ghost-btn { padding: 0 8px; font-size: .75rem; }
+}
+
+.page-head { padding: 28px 0 0; }
+.page-head + .stack, .page-head + .dash-grid, .page-head + section { margin-top: 24px; }
+
+/* ---------- dashboard layout ---------- */
+.dash-grid, .dash-cols { display: grid; gap: 18px; }
+.dash-cols { margin-top: 18px; }
+.dash-col { display: flex; flex-direction: column; gap: 18px; min-width: 0; }
+@media (min-width: 900px) {
+  .dash-grid { grid-template-columns: 1.35fr 1fr; align-items: start; }
+  .dash-cols { grid-template-columns: 1fr 1fr; align-items: start; }
+}
+.act-step { display: flex; gap: 14px; align-items: flex-start; text-decoration: none; color: inherit; padding: 14px; border-radius: 1.1rem; border: 2px solid var(--fg); background: color-mix(in oklab, var(--primary) 30%, var(--card)); }
+.act-step b { display: block; font-size: 1rem; }
+.act-step small { display: block; color: var(--muted-fg); font-size: .8rem; margin-top: 2px; }
+.act-step:hover { background: color-mix(in oklab, var(--primary) 45%, var(--card)); }
+
+/* ---------- numbered step track (all milestones at a glance) ---------- */
+.mtrack { list-style: none; margin: 4px 0 0; padding: 0; display: flex; }
+.mtrack li { flex: 1; position: relative; display: flex; justify-content: center; min-width: 0; }
+.mtrack li::before { content: ""; position: absolute; top: 16px; right: 50%; width: 100%; height: 3px; background: var(--border); }
+.mtrack li:first-child::before { display: none; }
+.mtrack li.done::before, .mtrack li.active::before { background: var(--st-good); }
+.mtrack a { position: relative; z-index: 1; display: flex; flex-direction: column; align-items: center; gap: 6px; text-decoration: none; color: inherit; min-width: 36px; padding: 0 2px; border-radius: 12px; }
+.mtrack .node { width: 34px; height: 34px; border-radius: 99px; display: grid; place-items: center; font-weight: 800; font-size: .82rem; background: var(--card); border: 2px solid var(--border); color: var(--muted-fg); transition: transform .15s var(--ease); }
+.mtrack .node svg { width: 14px; height: 14px; }
+.mtrack a:hover .node { transform: scale(1.08); }
+.mtrack li.done .node { background: var(--st-good); border-color: var(--st-good); color: #fff; }
+.mtrack li.active .node { background: var(--primary); border-color: var(--fg); color: var(--fg); }
+.mtrack li.current .node { box-shadow: 0 0 0 3px var(--card), 0 0 0 5px var(--fg); }
+.mtrack .lbl { font-size: .68rem; line-height: 1.25; text-align: center; color: var(--muted-fg); max-width: 92px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.mtrack li.current .lbl, .mtrack li.active .lbl { color: var(--fg); font-weight: 700; }
+.mtrack.mini .node { width: 28px; height: 28px; font-size: .74rem; }
+.mtrack.mini li::before { top: 13px; }
+@media (max-width: 759px) {
+  .mtrack .lbl { display: none; }
+  .mtrack .node { width: 30px; height: 30px; font-size: .76rem; }
+  .mtrack li::before { top: 14px; }
+}
+
+/* ---------- milestone list ---------- */
+.filters { display: flex; flex-wrap: wrap; gap: 8px; margin: 22px 0 14px; }
+.mlist { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 12px; }
+.mrow { display: flex; gap: 14px; align-items: flex-start; padding: 16px; border-radius: 1.3rem; border: 1px solid var(--border); background: var(--card); color: inherit; text-decoration: none; transition: background .15s, border-color .15s; }
+.mrow:hover { background: var(--secondary); }
+.mrow.active { border: 2px solid var(--fg); padding: 15px; background: color-mix(in oklab, var(--primary) 18%, var(--card)); }
+.mrow.done { background: color-mix(in oklab, var(--st-good) 6%, var(--card)); }
+.mnum { width: 36px; height: 36px; flex: none; border-radius: 99px; display: grid; place-items: center; font-weight: 800; font-size: .9rem; background: var(--secondary); }
+.mrow.active .mnum, .act-step .mnum { background: var(--fg); color: var(--primary); }
+.mrow.done .mnum { background: var(--st-good); color: #fff; }
+.mnum .ck { width: 14px; height: 14px; display: grid; }
+.mrow-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 6px; }
+.mrow-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px 12px; flex-wrap: wrap; }
+.mrow-top b { font-size: .98rem; }
+.mrow-main > small { color: var(--muted-fg); font-size: .8rem; }
+.mrow-meta { color: var(--muted-fg); font-size: .74rem; }
+.mrow .chev { align-self: center; font-size: 1.6rem; line-height: 1; color: var(--muted-fg); }
+.tag .icon { width: 13px; height: 13px; }
+.mmeter { display: flex; align-items: center; gap: 10px; }
+.mmeter .meter { flex: 1; height: 10px; }
+.mmeter b { font-size: .85rem; min-width: 40px; text-align: right; }
+.mmeter.compact .meter { height: 8px; }
+
+/* ---------- milestone detail ---------- */
+.crumbs { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding-top: 20px; margin-bottom: 12px; font-size: .82rem; color: var(--muted-fg); }
+.crumbs .link-btn { display: inline-flex; align-items: center; text-decoration: none; padding-left: 0; }
+.facts { display: grid; gap: 10px; margin: 0; grid-template-columns: 1fr; }
+@media (min-width: 640px) { .facts { grid-template-columns: repeat(3, 1fr); } }
+.facts div { background: var(--secondary); border-radius: 1rem; padding: 12px 14px; }
+.facts dt { font-size: .72rem; font-weight: 600; color: var(--muted-fg); }
+.facts dd { margin: 2px 0 0; font-weight: 800; font-size: .92rem; }
+.tasks { display: flex; flex-direction: column; }
+.task { padding: 12px 0; border-top: 1px solid var(--border); min-height: 44px; align-items: center; }
+.task:first-child { border-top: 0; padding-top: 0; }
+.task input:checked + span { color: var(--muted-fg); text-decoration: line-through; }
+.help-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; font-size: .9rem; }
+.help-list li { display: flex; gap: 10px; align-items: flex-start; }
+.help-list .icon { color: var(--st-good-ink); margin-top: 2px; }
+.pager { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.pager a { display: flex; flex-direction: column; gap: 4px; padding: 14px 16px; border-radius: 1.1rem; border: 1px solid var(--border); background: var(--card); text-decoration: none; color: inherit; min-height: 64px; }
+.pager a:hover { background: var(--secondary); }
+.pager a.nx { text-align: right; }
+.pager small { color: var(--muted-fg); font-size: .75rem; font-weight: 700; }
+.pager b { font-size: .88rem; }
+.next-up { display: flex; gap: 12px; align-items: flex-start; }
+.next-up b { display: block; }
+.next-up p { font-size: .86rem; color: var(--muted-fg); margin-top: 2px; }
+
+/* =====================================================================
+   v6 — detail tangga: target jelas, perbarui langsung, rencana, riwayat
+   ===================================================================== */
+
+/* ---------- target: sekarang vs target ---------- */
+.goal-tiles { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.goal-now, .goal-tgt { border-radius: 1.1rem; padding: 14px; display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.goal-now { background: var(--fg); color: var(--bg); }
+.goal-now.done { background: var(--st-good-ink); }
+.goal-tgt { background: var(--card); border: 2px dashed color-mix(in oklab, var(--fg) 45%, transparent); }
+.goal-now span, .goal-tgt span { font-size: .72rem; font-weight: 700; opacity: .8; display: inline-flex; align-items: center; gap: 5px; }
+.goal-tgt .icon { width: 14px; height: 14px; }
+.goal-now b { font-size: 1.25rem; font-weight: 800; line-height: 1.15; overflow-wrap: anywhere; }
+.goal-tgt b { font-size: 1.05rem; font-weight: 800; line-height: 1.2; overflow-wrap: anywhere; }
+.goal-gap { display: flex; align-items: center; gap: 8px; margin: 0; padding: 10px 14px; border-radius: .9rem; background: color-mix(in oklab, var(--accent) 35%, var(--card)); color: var(--accent-fg); font-weight: 800; font-size: .95rem; }
+.goal-gap svg, .goal-gap .icon { width: 18px; height: 18px; flex: none; }
+.goal-gap.done { background: color-mix(in oklab, var(--st-good) 15%, var(--card)); color: var(--st-good-ink); }
+
+/* batang target: isi = sekarang, arsiran = kekurangan, garis = target */
+.gbar { display: flex; flex-direction: column; gap: 8px; padding-top: 18px; }
+.gbar-track { position: relative; height: 18px; border-radius: 6px; background: var(--viz-track); }
+.gbar-fill { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 6px 0 0 6px; background: var(--fg); }
+.gbar-fill.good { background: var(--st-good); }
+.gbar-gap { position: absolute; top: 0; bottom: 0; background: repeating-linear-gradient(135deg, color-mix(in oklab, var(--accent) 70%, var(--card)) 0 5px, color-mix(in oklab, var(--accent) 30%, var(--card)) 5px 10px); border-radius: 0 6px 6px 0; }
+.gbar-target { position: absolute; top: -18px; bottom: -4px; width: 2px; margin-left: -1px; background: var(--fg); }
+.gbar-target span { position: absolute; top: -2px; right: 4px; font-size: .66rem; font-weight: 800; white-space: nowrap; }
+.gbar-tick { position: absolute; top: -4px; bottom: -4px; width: 1px; background: color-mix(in oklab, var(--fg) 40%, transparent); }
+.gbar-tick span { position: absolute; bottom: -16px; transform: translateX(-50%); font-size: .62rem; color: var(--muted-fg); white-space: nowrap; }
+.gbar-legend { display: flex; justify-content: space-between; gap: 8px 14px; flex-wrap: wrap; font-size: .78rem; color: var(--muted-fg); margin-top: 4px; }
+.gbar-legend span { display: inline-flex; align-items: center; gap: 6px; }
+.gbar-legend b { color: var(--fg); }
+.sw { width: 12px; height: 12px; border-radius: 3px; flex: none; display: inline-block; }
+.sw.cur { background: var(--fg); }
+.sw.good { background: var(--st-good); }
+.sw.gap { background: repeating-linear-gradient(135deg, color-mix(in oklab, var(--accent) 70%, var(--card)) 0 3px, color-mix(in oklab, var(--accent) 30%, var(--card)) 3px 6px); }
+
+/* syarat selesai */
+.criteria { border-top: 1px solid var(--border); padding-top: 14px; }
+.criteria .lbl { font-size: .78rem; font-weight: 800; margin-bottom: 8px; }
+.criteria ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.criteria li { display: flex; gap: 10px; align-items: flex-start; font-size: .88rem; font-weight: 600; }
+.criteria li small { color: var(--muted-fg); font-weight: 500; }
+.criteria .ci { width: 20px; height: 20px; flex: none; display: grid; color: var(--muted-fg); }
+.criteria .ci svg { width: 20px; height: 20px; }
+.criteria li.met .ci, .criteria li.met > span:last-child { color: var(--st-good-ink); }
+.criteria li.opt { opacity: .75; font-weight: 500; }
+
+/* ---------- daftar tangga: angka utama + kekurangan ---------- */
+.mrow-goal { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; font-size: .88rem; }
+.gap-pill { font-size: .72rem; font-weight: 800; padding: 3px 10px; border-radius: 99px; background: color-mix(in oklab, var(--accent) 35%, var(--card)); color: var(--accent-fg); }
+
+/* ---------- perbarui data ---------- */
+.more summary { cursor: pointer; font-size: .82rem; font-weight: 700; color: var(--muted-fg); min-height: 36px; display: flex; align-items: center; }
+.more summary:hover { color: var(--fg); }
+.drow { border: 1px solid var(--border); border-radius: 1.1rem; padding: 14px; display: flex; flex-direction: column; gap: 10px; }
+.drow.paid { background: color-mix(in oklab, var(--st-good) 6%, var(--card)); }
+.drow-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.drow-head b { font-size: .95rem; }
+.prio { width: 26px; height: 26px; flex: none; border-radius: 99px; background: var(--fg); color: var(--primary); display: grid; place-items: center; font-weight: 800; font-size: .78rem; }
+.drow-facts { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin: 0; }
+.drow-facts div { background: var(--secondary); border-radius: .8rem; padding: 8px 10px; min-width: 0; }
+.drow-facts dt { font-size: .66rem; font-weight: 600; color: var(--muted-fg); }
+.drow-facts dd { margin: 2px 0 0; font-size: .82rem; font-weight: 800; overflow-wrap: anywhere; }
+.drow .link-btn { align-self: flex-start; padding-left: 0; }
+
+/* ---------- rencana ---------- */
+.sim { display: flex; flex-direction: column; gap: 16px; padding: 14px; border-radius: 1.1rem; background: var(--secondary); }
+.sim label output { font-weight: 800; }
+.sim input[type="range"]::-webkit-slider-runnable-track { background: linear-gradient(to right, var(--fg) var(--p, 0%), var(--card) var(--p, 0%)); border-color: color-mix(in oklab, var(--fg) 25%, transparent); }
+.sim input[type="range"]::-moz-range-track { background: var(--card); border-color: color-mix(in oklab, var(--fg) 25%, transparent); }
+.sim-out { display: flex; flex-direction: column; gap: 12px; padding: 14px; border-radius: 1.1rem; border: 2px solid var(--border); }
+.sim-out.ok { border-color: var(--st-good); }
+.sim-out.bad { border-color: color-mix(in oklab, var(--st-critical) 50%, var(--border)); }
+.verdict { display: flex; gap: 8px; align-items: flex-start; font-size: .88rem; margin: 0; }
+.verdict svg { width: 18px; height: 18px; flex: none; margin-top: 1px; }
+.sim-out.ok .verdict { color: var(--st-good-ink); }
+.sim-out.bad .verdict { color: var(--st-critical-ink); }
+.plan-big { font-size: 1.3rem; font-weight: 800; letter-spacing: -0.01em; }
+.eta { display: flex; flex-direction: column; gap: 2px; }
+.hbars.tight { gap: 4px; }
+.hbars.tight .hrow { margin-top: 8px; }
+.hrow .tag { font-size: .6rem; padding: 1px 7px; }
+
+/* proyeksi tabungan per bulan */
+.proj { display: flex; flex-direction: column; gap: 6px; }
+.proj-plot { position: relative; height: 120px; }
+.proj-cols { position: absolute; inset: 18px 0 0 0; display: flex; align-items: flex-end; gap: 4px; }
+.proj-cols span { flex: 1; max-width: 48px; background: color-mix(in oklab, var(--viz-in) 55%, var(--card)); border-radius: 4px 4px 0 0; min-height: 4px; }
+.proj-cols span:first-child { background: var(--fg); }
+.proj-cols span.hit { background: var(--st-good); }
+.proj-line { position: absolute; left: 0; right: 0; top: 18px; border-top: 2px solid var(--fg); z-index: 1; }
+.proj-line span { position: absolute; right: 0; top: -18px; font-size: .68rem; font-weight: 800; }
+
+/* daftar prioritas utang */
+.prio-list { list-style: none; margin: 0 0 12px; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.prio-list li { display: flex; gap: 10px; align-items: center; font-size: .86rem; }
+.prio-list small { color: var(--muted-fg); }
+
+/* grafik garis */
+.lc { margin: 8px 0 0; display: flex; flex-direction: column; gap: 6px; }
+.lc figcaption { font-size: .8rem; font-weight: 700; }
+.lc svg { width: 100%; height: auto; display: block; overflow: visible; }
+.lc-grid { stroke: var(--viz-grid); stroke-width: 1; }
+.lc-ax { font-size: 10px; fill: var(--muted-fg); font-family: inherit; }
+
+/* pilar → tangga terkait */
+.pillar-link { display: block; text-decoration: none; color: inherit; padding: 8px; margin: -8px; border-radius: 1rem; }
+.pillar-link:hover { background: var(--secondary); }
+
+/* ---------- jalur paralel utang ---------- */
+.mtrack-wrap { position: relative; }
+.mtrack-wrap.has-lane { padding-bottom: 32px; }
+.mtrack li.rapor .node { border-style: dashed; }
+.mtrack li.rapor.done .node { background: var(--primary); color: var(--primary-fg); border-style: solid; border-color: var(--fg); }
+.lane-band { position: absolute; bottom: 0; height: 22px; border-radius: 99px; background: color-mix(in oklab, var(--viz-debt) 14%, var(--card)); border: 1.5px solid color-mix(in oklab, var(--viz-debt) 55%, var(--border)); overflow: hidden; text-decoration: none; color: var(--fg); display: flex; align-items: center; justify-content: center; }
+.lane-band i { position: absolute; left: 0; top: 0; bottom: 0; background: color-mix(in oklab, var(--viz-debt) 45%, var(--card)); }
+.lane-band span { position: relative; font-size: .68rem; font-weight: 800; }
+.lane-band.done { background: color-mix(in oklab, var(--st-good) 14%, var(--card)); border-color: var(--st-good); }
+.lane-band.done i { background: color-mix(in oklab, var(--st-good) 35%, var(--card)); }
+.lane-band.current { box-shadow: 0 0 0 2px var(--card), 0 0 0 4px var(--fg); }
+.lane-band:focus-visible { outline: 2px solid var(--fg); outline-offset: 2px; }
+.lane-mini { display: flex; align-items: center; gap: 12px; padding: 12px 14px; border-radius: 1.1rem; text-decoration: none; color: inherit; background: color-mix(in oklab, var(--viz-debt) 8%, var(--card)); border: 1px solid color-mix(in oklab, var(--viz-debt) 35%, var(--border)); }
+.lane-mini:hover { background: color-mix(in oklab, var(--viz-debt) 14%, var(--card)); }
+.lane-ic { width: 34px; height: 34px; flex: none; border-radius: 99px; display: grid; place-items: center; background: var(--viz-debt); color: #fff; }
+.lane-ic .icon { width: 18px; height: 18px; }
+.lane-txt { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.lane-txt b { font-size: .88rem; }
+.lane-txt small { color: var(--muted-fg); font-size: .78rem; }
+.lane-card { border-color: color-mix(in oklab, var(--viz-debt) 40%, var(--border)); }
+.lane-card h2 { display: flex; align-items: center; gap: 8px; }
+.lane-card h2 .icon { color: var(--viz-debt); }
+.checkpoints { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.checkpoints li { display: flex; gap: 10px; align-items: flex-start; font-size: .86rem; font-weight: 600; }
+.checkpoints li small { color: var(--muted-fg); font-weight: 500; }
+.checkpoints .ci { width: 20px; height: 20px; flex: none; display: grid; color: var(--muted-fg); }
+.checkpoints .ci svg { width: 20px; height: 20px; }
+.checkpoints li.met .ci, .checkpoints li.met > span:last-child { color: var(--st-good-ink); }
+
+/* ---------- pembagian sisa uang ---------- */
+.phase { display: flex; align-items: center; gap: 8px; margin: 0; font-size: .95rem; }
+.stack100.tall { height: 22px; }
+.stack100 span[tabindex]:focus-visible { outline: 2px solid var(--fg); outline-offset: 2px; }
+.alloc-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.alloc-list li { display: grid; grid-template-columns: 12px 1fr auto; column-gap: 10px; row-gap: 0; align-items: center; font-size: .86rem; font-weight: 600; }
+.alloc-list i { width: 12px; height: 12px; border-radius: 3px; }
+.alloc-list b { text-align: right; }
+.alloc-list b small { font-weight: 500; color: var(--muted-fg); }
+.alloc-list > li > small { grid-column: 2 / span 2; color: var(--muted-fg); font-size: .76rem; font-weight: 500; }
+
+/* ---------- catatan terakhir & proteksi ---------- */
+.last-entry { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; padding: 8px 12px; border-radius: .9rem; background: var(--secondary); font-size: .8rem; }
+.last-entry small { color: var(--muted-fg); }
+.last-entry .link-btn, .snack-btn { display: inline-flex; align-items: center; gap: 6px; }
+.last-entry .icon, .snack-btn .icon { width: 16px; height: 16px; }
+.prot-row { display: flex; align-items: center; gap: 12px; padding: 12px; border-radius: 1.1rem; border: 1px solid var(--border); }
+.prot-row.on { background: color-mix(in oklab, var(--st-good) 7%, var(--card)); border-color: color-mix(in oklab, var(--st-good) 40%, var(--border)); }
+.prot-row .ci { width: 22px; height: 22px; flex: none; display: grid; color: var(--muted-fg); }
+.prot-row .ci svg { width: 22px; height: 22px; }
+.prot-row.on .ci { color: var(--st-good-ink); }
+.prot-txt { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.prot-txt b { font-size: .9rem; }
+.prot-txt small { color: var(--muted-fg); font-size: .76rem; line-height: 1.4; }
+.chips.quick { margin-top: 8px; }
+.chips.quick .chip { min-height: 34px; font-size: .78rem; }
+.eta .verdict { display: flex; gap: 8px; align-items: flex-start; font-size: .84rem; font-weight: 600; margin-top: 6px; }
+.eta .verdict svg { width: 18px; height: 18px; flex: none; }
+.verdict.late { color: var(--st-serious-ink); }
+.verdict.ontime { color: var(--st-good-ink); }
+
+/* ---------- cara naik skor ---------- */
+.score-now { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.score-now .hero-num small { font-size: 1rem; color: var(--muted-fg); font-weight: 700; }
+.gain-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.gain-list a, .gain-list li > div { display: flex; align-items: center; gap: 12px; padding: 10px 12px; border-radius: 1rem; border: 1px solid var(--border); text-decoration: none; color: inherit; }
+.gain-list a:hover { background: var(--secondary); }
+.gain-list span:nth-child(2) { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.gain-list b { font-size: .88rem; }
+.gain-list small { color: var(--muted-fg); font-size: .76rem; line-height: 1.4; }
+.gain { flex: none; min-width: 44px; text-align: center; font-weight: 800; font-size: .86rem; padding: 6px 8px; border-radius: 99px; background: var(--primary); color: var(--primary-fg); font-variant-numeric: tabular-nums; }
+
+/* ---------- rapor ---------- */
+.concl-sum { font-size: .95rem; font-weight: 600; line-height: 1.5; margin: 0; }
+.concl .lbl { font-size: .78rem; font-weight: 800; margin: 0 0 8px; }
+.concl-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.concl-list li { display: flex; gap: 10px; align-items: flex-start; font-size: .85rem; }
+.concl-list li svg { width: 18px; height: 18px; flex: none; margin-top: 1px; }
+.concl-list li small { color: var(--muted-fg); }
+.concl-list.good svg { color: var(--st-good-ink); }
+.concl-list.bad svg { color: var(--st-serious-ink); }
+.concl-prio { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 6px; font-size: .86rem; font-weight: 600; }
+.from-to { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+.from-to > span:not(.st) { display: flex; flex-direction: column; }
+.from-to small { font-size: .72rem; color: var(--muted-fg); font-weight: 600; }
+.from-to b { font-size: 1.6rem; font-weight: 800; font-variant-numeric: tabular-nums; }
+.cmp { display: flex; flex-direction: column; }
+.cmp-row { display: grid; grid-template-columns: 1fr auto; grid-template-areas: "l st" "v v"; gap: 2px 10px; padding: 10px 0; border-bottom: 1px solid var(--border); align-items: center; }
+.cmp-row:last-child { border-bottom: 0; }
+.cmp-l { grid-area: l; font-size: .84rem; font-weight: 700; }
+.cmp-v { grid-area: v; font-size: .8rem; color: var(--muted-fg); }
+.cmp-v b { color: var(--fg); }
+.cmp-row .st { grid-area: st; font-size: .72rem; padding: 3px 8px; }
+.st.neutral { background: var(--secondary); color: var(--muted-fg); }
+.journey { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+.journey li { display: flex; gap: 12px; align-items: flex-start; position: relative; padding-bottom: 14px; }
+.journey li:not(:last-child)::before { content: ""; position: absolute; left: 14px; top: 30px; bottom: 0; width: 2px; background: var(--border); }
+.journey li.done:not(:last-child)::before { background: var(--st-good); }
+.journey .jn { width: 30px; height: 30px; flex: none; border-radius: 99px; display: grid; place-items: center; font-weight: 800; font-size: .78rem; background: var(--secondary); border: 2px solid var(--border); }
+.journey .jn svg { width: 14px; height: 14px; }
+.journey li.done .jn { background: var(--st-good); border-color: var(--st-good); color: #fff; }
+.journey li.active .jn { background: var(--primary); border-color: var(--fg); }
+.journey li.lane .jn { background: var(--viz-debt); border-color: var(--viz-debt); color: #fff; }
+.journey li > span:last-child { display: flex; flex-direction: column; padding-top: 4px; }
+.journey b { font-size: .88rem; }
+.journey small { color: var(--muted-fg); font-size: .76rem; }
+.ai-json { margin: 10px 0 0; padding: 12px; border-radius: .9rem; background: var(--secondary); font-size: .7rem; line-height: 1.45; max-height: 360px; overflow: auto; white-space: pre; }
+.mrow.rapor .mnum { background: var(--primary); color: var(--primary-fg); }
+.mrow.rapor .mnum svg { width: 16px; height: 16px; }
+
+/* ---------- konfirmasi & snackbar ---------- */
+.cf-rows { margin: 0; display: flex; flex-direction: column; gap: 8px; }
+.cf-rows div { display: flex; flex-direction: column; gap: 4px; padding: 12px; border-radius: 1rem; background: var(--secondary); }
+.cf-rows dt { font-size: .76rem; font-weight: 700; color: var(--muted-fg); }
+.cf-rows dd { margin: 0; display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+.cf-rows .b { color: var(--muted-fg); text-decoration: line-through; font-size: .9rem; }
+.cf-rows .arr { color: var(--muted-fg); }
+.cf-rows dd b { font-size: 1.15rem; font-weight: 800; }
+.sheet-actions { display: flex; gap: 10px; }
+.snack { position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%) translateY(20px); width: min(calc(100% - 32px), 420px); display: flex; align-items: center; gap: 12px; justify-content: space-between; background: var(--fg); color: var(--bg); padding: 10px 10px 10px 16px; border-radius: 1rem; font-size: .84rem; font-weight: 600; opacity: 0; pointer-events: none; transition: .3s var(--ease); z-index: 60; box-shadow: 0 10px 30px rgba(0, 0, 0, .2); }
+.snack.show { opacity: 1; transform: translateX(-50%); }
+.snack.show.has-btn { pointer-events: auto; }
+.snack-btn { flex: none; min-height: 40px; padding: 0 12px; border: 0; border-radius: 99px; background: var(--primary); color: var(--primary-fg); font: inherit; font-weight: 800; cursor: pointer; }
+@media (prefers-reduced-motion: reduce) { .snack { transition: none; } }

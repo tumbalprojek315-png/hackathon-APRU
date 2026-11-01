@@ -1,0 +1,110 @@
+<!doctype html>
+<html lang="id">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Simulasi penyedia open finance</title>
+  <meta name="robots" content="noindex">
+  <style>
+    :root { --bg: #f1f4f8; --card: #fff; --fg: #0f1b2d; --muted: #52607a; --line: #d6dde8; --brand: #1f4fd1; --warn-bg: #fff4d6; --warn: #6b4a00; }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: var(--bg); color: var(--fg); font: 16px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; min-height: 100dvh; }
+    .banner { background: var(--warn-bg); color: var(--warn); font-size: .82rem; padding: 10px 16px; text-align: center; border-bottom: 1px solid #f0d78c; }
+    main { width: min(100% - 32px, 440px); margin: 32px auto; }
+    .card { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 24px; display: flex; flex-direction: column; gap: 16px; }
+    .who { display: flex; align-items: center; gap: 10px; font-size: .8rem; color: var(--muted); }
+    .logo { width: 36px; height: 36px; border-radius: 8px; background: var(--brand); color: #fff; display: grid; place-items: center; font-weight: 800; font-size: .8rem; }
+    h1 { font-size: 1.25rem; margin: 0; line-height: 1.3; }
+    p { margin: 0; }
+    ul { margin: 0; padding-left: 20px; font-size: .9rem; display: flex; flex-direction: column; gap: 4px; }
+    .muted { color: var(--muted); font-size: .85rem; }
+    label { font-size: .85rem; font-weight: 600; display: block; margin-bottom: 6px; }
+    input { width: 100%; min-height: 46px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; font: inherit; }
+    input:focus { outline: 3px solid #b7c8f5; border-color: var(--brand); }
+    .row { display: flex; gap: 10px; }
+    button { min-height: 46px; padding: 0 18px; border-radius: 10px; font: inherit; font-weight: 700; cursor: pointer; border: 1px solid var(--brand); background: var(--brand); color: #fff; flex: 1; }
+    button.ghost { background: #fff; color: var(--brand); }
+    button:disabled { opacity: .5; cursor: not-allowed; }
+    .err { color: #b3261e; font-size: .82rem; }
+    .hint { background: #eef2fb; border-radius: 10px; padding: 10px 12px; font-size: .82rem; color: var(--muted); }
+    [hidden] { display: none !important; }
+  </style>
+</head>
+<body>
+  <div class="banner" role="note"><strong>SIMULASI.</strong> Di versi asli, halaman ini milik penyedia open finance berlisensi, bukan milik Laju. Laju tidak pernah melihat nomor HP, OTP, atau PIN Anda.</div>
+  <main>
+    <div class="card" id="card">
+      <div class="who"><span class="logo" aria-hidden="true">OF</span><span>Penyedia open finance (simulasi)</span></div>
+      <h1 id="title">Laju meminta akses hanya-baca ke akun e-wallet Anda</h1>
+      <div>
+        <p class="muted">Yang dibagikan ke Laju:</p>
+        <ul>
+          <li>Riwayat transaksi 30 hari terakhir</li>
+          <li>Nama pemilik akun dan nomor yang disamarkan</li>
+        </ul>
+      </div>
+      <p class="muted">Laju <strong>tidak bisa</strong> memindahkan uang, melihat PIN, atau melakukan pembayaran atas nama Anda.</p>
+
+      <form id="phoneForm" novalidate>
+        <label for="phone">Nomor HP yang terdaftar di <span data-wallet></span></label>
+        <input id="phone" inputmode="tel" autocomplete="tel" placeholder="08xxxxxxxxxx" aria-describedby="phoneErr">
+        <p class="err" id="phoneErr" hidden>Masukkan nomor HP yang valid (minimal 9 digit).</p>
+        <div class="row" style="margin-top:14px"><button type="button" class="ghost" data-deny>Tolak</button><button type="submit">Kirim kode OTP</button></div>
+      </form>
+
+      <form id="otpForm" hidden novalidate>
+        <label for="otp">Kode OTP</label>
+        <input id="otp" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="6 digit" aria-describedby="otpHint otpErr">
+        <p class="hint" id="otpHint">Simulasi: kode OTP selalu <strong>123456</strong>. Di versi asli, kode dikirim lewat SMS/WhatsApp oleh e-wallet.</p>
+        <p class="err" id="otpErr" hidden>Kode OTP salah.</p>
+        <div class="row" style="margin-top:14px"><button type="button" class="ghost" data-deny>Tolak</button><button type="submit">Izinkan akses</button></div>
+      </form>
+    </div>
+  </main>
+  <script>
+    (() => {
+      const q = new URLSearchParams(location.search);
+      const names = { gopay: "GoPay", ovo: "OVO", dana: "DANA", shopeepay: "ShopeePay", linkaja: "LinkAja" };
+      const wallet = names[q.get("wallet")] || "e-wallet";
+      document.querySelectorAll("[data-wallet]").forEach(el => (el.textContent = wallet));
+      document.getElementById("title").textContent = `Laju meminta akses hanya-baca ke akun ${wallet} Anda`;
+
+      // Hanya boleh kembali ke callback Laju di origin yang sama (cegah open redirect).
+      let cb;
+      try { cb = new URL(q.get("callback") || "", location.origin); } catch { cb = null; }
+      if (!cb || cb.origin !== location.origin || cb.pathname !== "/api/wallets/callback" || !q.get("session")) {
+        document.getElementById("card").innerHTML = "<h1>Tautan tidak valid</h1><p class='muted'>Kembali ke Laju dan coba hubungkan lagi.</p>";
+        return;
+      }
+      const finish = (extra) => {
+        const u = new URL(cb);
+        u.search = new URLSearchParams({ session: q.get("session"), wallet: q.get("wallet") || "", ...extra }).toString();
+        location.replace(u.toString());
+      };
+      document.querySelectorAll("[data-deny]").forEach(b => b.addEventListener("click", () => finish({ error: "access_denied" })));
+
+      let phone = "";
+      document.getElementById("phoneForm").addEventListener("submit", (e) => {
+        e.preventDefault();
+        phone = document.getElementById("phone").value.replace(/\D/g, "");
+        const bad = phone.length < 9;
+        document.getElementById("phoneErr").hidden = !bad;
+        document.getElementById("phone").setAttribute("aria-invalid", bad);
+        if (bad) return;
+        document.getElementById("phoneForm").hidden = true;
+        document.getElementById("otpForm").hidden = false;
+        document.getElementById("otp").focus();
+      });
+      document.getElementById("otpForm").addEventListener("submit", (e) => {
+        e.preventDefault();
+        const ok = document.getElementById("otp").value.trim() === "123456";
+        document.getElementById("otpErr").hidden = ok;
+        if (!ok) return;
+        e.submitter.disabled = true;
+        e.submitter.textContent = "Memproses…";
+        finish({ code: q.get("code") || "", ref: phone.slice(-4) });
+      });
+    })();
+  </script>
+</body>
+</html>
