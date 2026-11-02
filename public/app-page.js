@@ -24,6 +24,7 @@
     circle: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><circle cx="12" cy="12" r="9"/></svg>',
     star: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 3h8v6a4 4 0 0 1-8 0V3Zm-3 1h3v3a3 3 0 0 1-3-3Zm14 0h-3v3a3 3 0 0 0 3-3ZM12 13v4m-4 4h8"/></svg>',
     lane: '<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 7h18M3 17h18M7 7v10M17 7v10"/></svg>',
+    lock: '<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>',
     undo: '<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/></svg>',
   };
 
@@ -47,6 +48,7 @@
     if (p === "profil") { view.innerHTML = profilePage(); document.title = "Profil · Laju"; }
     else if (p === "rapor") { view.innerHTML = rapor(); document.title = "Rapor · Laju"; }
     else if (p === "milestone" && id === "utang") { view.innerHTML = laneDetail(); document.title = "Jalur pelunasan utang · Laju"; }
+    else if (p === "milestone" && id === "skor") { view.innerHTML = scorePage(); document.title = "Rincian skor · Laju"; }
     else if (p === "milestone" && id) { view.innerHTML = detail(id); document.title = `${ms.find(m => m.id === id)?.title || "Tangga"} · Laju`; }
     else if (p === "milestone") { view.innerHTML = overview(); document.title = "Tangga milestone · Laju"; }
     else { view.innerHTML = dashboard(); document.title = "Dashboard · Laju"; }
@@ -99,15 +101,116 @@
         <h1 class="step-title">Halo, ${firstName()}</h1>
         <p class="step-desc">Ringkasan keuangan Anda, ${fmtDay(new Date())}. ${c.verified ? `Data dari isian Anda dan ${aggregate().count} e-wallet terverifikasi.` : "Data dari isian manual. Hubungkan e-wallet lewat Profil supaya terverifikasi."}</p>
       </div>
-      <div class="dash-grid">
-        ${activeCard(activeStep(), doneN)}
-        ${allocCard(x)}
-        ${vizScore(h)}
-      </div>
-      <div class="dash-cols">
-        <div class="dash-col">${vizPillars(h)}${vizCashflow(c, h)}</div>
-        <div class="dash-col">${vizEmergency(c, h)}${vizReliability(c, { checks: "summary" })}</div>
+      <div class="stack dash">
+        ${focusCard(doneN)}
+        ${scoreCard(h)}
+        ${planSummary(x)}
+        ${pillarsMini(h)}
+        ${cashCard(c)}
+        ${goalSummary()}
       </div>`;
+  }
+
+  // 1. Hanya langkah sekarang (kontras) dan langkah berikutnya (terkunci)
+  function focusCard(doneN) {
+    const steps = mainSteps(), act = activeStep(), lane = ms[0].x.lane;
+    if (!act) return `<section class="card focus-card"><div class="card-head"><h2>Semua langkah selesai</h2></div><div><a class="btn sm" href="#rapor">Lihat rapor akhir</a></div></section>`;
+    const nxt = steps.find(m => m.index > act.index && m.status === "next");
+    return `<section class="card focus-card" aria-labelledby="fc-h">
+      <div class="card-head"><h2 id="fc-h">Langkah Anda</h2><p>${doneN} dari ${steps.length} selesai</p></div>
+      <a class="fc-now" href="#milestone/${act.id}">
+        <span class="fc-tag">Kerjakan sekarang</span>
+        <span class="fc-row"><span class="fc-num">${act.number}</span><b>${esc(act.title)}</b></span>
+        ${act.gap ? `<span class="fc-gap">${IC.target}<span>${esc(act.gap)}</span></span>` : ""}
+        <span class="fc-meter"><span class="fc-track"><i style="width:${Math.max(act.progress, 2)}%"></i></span><b class="num">${act.progress}%</b></span>
+        <span class="fc-cta">Kerjakan ›</span>
+      </a>
+      ${lane.active && !lane.done ? laneMini(lane) : ""}
+      ${nxt ? `<div class="fc-next"><span class="fc-lock">${IC.lock}</span><span><small>Berikutnya · terbuka setelah langkah ${act.number} selesai</small><b>${nxt.number}. ${esc(nxt.title)}</b></span></div>` : ""}
+    </section>`;
+  }
+
+  // 2. Skor + poin yang paling menaikkan dan menurunkan. Rincian ada di Tangga.
+  function scoreCard(h) {
+    const parts = h.pillars.flatMap(p => p.parts);
+    const up = parts.filter(p => p.pts > 0).sort((a, b) => b.pts - a.pts).slice(0, 2);
+    const down = parts.filter(p => p.pts < p.max).sort((a, b) => (b.max - b.pts) - (a.max - a.pts)).slice(0, 3);
+    const li = (p, n, cls) => `<li class="${cls}"><b class="num">${n}</b><span>${esc(p.label)}</span></li>`;
+    return `<section class="card" aria-labelledby="sc-h">
+      <div class="card-head"><h2 id="sc-h">Skor kesehatan finansial</h2></div>
+      <div class="sc-top"><span class="sc-num num" style="color:${h.grade.color}">${h.total}<small>/100</small></span>${statusPill(h.grade.id, h.grade.label)}</div>
+      <div class="sc-why">
+        ${up.length ? `<div><p class="sc-lbl">Menaikkan skor</p><ul class="sc-list">${up.map(p => li(p, `+${p.pts}`, "up")).join("")}</ul></div>` : ""}
+        ${down.length ? `<div><p class="sc-lbl">Menurunkan skor</p><ul class="sc-list">${down.map(p => li(p, `−${p.max - p.pts}`, "down")).join("")}</ul></div>` : ""}
+      </div>
+      <a class="more-link" href="#milestone/skor">Rincian skor di Tangga ›</a>
+    </section>`;
+  }
+
+  // 3. Rencana uang dari isian pengguna di Tangga. Belum ada: tombol ke langkah sekarang.
+  function planSummary(x) {
+    const P = S.milestones.plans, days = S.profile.daysPerWeek * WEEKS, rows = [];
+    const perDay = (v) => `${rp(v)} per hari narik <small>≈ ${rpShort(v * days)}/bln</small>`;
+    const st = (id) => ms.find(m => m.id === id);
+    if (P.minus && x.net < 0) rows.push(["Keluar dari minus", `Hemat ${rp(P.minus.cut)}/bln + narik ${P.minus.hours} jam/minggu lebih`, "minus"]);
+    const em = ["bantalan", "darurat"].find(id => P[id] && st(id)?.status !== "done");
+    if (em) rows.push(["Dana darurat", perDay(P[em].perDay), em]);
+    if (P.tujuan && st("tujuan")?.status !== "done") rows.push(["Tabungan tujuan", perDay(P.tujuan.perDay), "tujuan"]);
+    if (Number(S.resilience.monthlySave) > 0) rows.push(["Menabung rutin", `${rp(Number(S.resilience.monthlySave))} per bulan`, "rutin"]);
+    if (P.lane && x.lane.active && !x.lane.done) rows.push(["Tambahan bayar utang", `${rp(P.lane.extra)} per bulan`, "utang"]);
+    const act = activeStep();
+    return `<section class="card" aria-labelledby="pl-h">
+      <div class="card-head"><h2 id="pl-h">Rencana uang bulan ini</h2></div>
+      ${rows.length ? `<ul class="plan-list">${rows.map(([l, v, id]) => `<li><a href="#milestone/${id}"><span>${l}</span><b class="num">${v}</b></a></li>`).join("")}</ul>`
+        : `<p class="hint">Belum ada rencana. Susun rencana di langkah yang sedang Anda kerjakan.</p>
+           <div><a class="btn sm" href="#milestone/${act ? act.id : ""}">Susun rencana ›</a></div>`}
+    </section>`;
+  }
+
+  // 4. Empat pilar, ringkas. Rincian ada di Tangga.
+  function pillarsMini(h) {
+    return `<a class="card pil-mini" href="#milestone/skor" aria-label="Empat pilar kesehatan finansial. Buka rincian di Tangga">
+      <div class="card-head"><h2>Empat pilar</h2><span class="chev" aria-hidden="true">›</span></div>
+      <ul>${h.pillars.map(p => { const b = band(p.score); return `<li><span class="pm-l">${p.label}</span><span class="pm-bar"><i style="width:${Math.max(p.score, 3)}%;background:${b.color}"></i></span><b class="num">${p.pts}<small>/${p.max}</small></b></li>`; }).join("")}</ul>
+    </a>`;
+  }
+
+  // 5. Arus kas: dua batang (masuk dan keluar) lalu satu angka hasil
+  function cashCard(c) {
+    const inc = c.income, exp = c.expMid, debt = c.debtMonthly, out = exp + debt, net = inc - out;
+    const max = Math.max(inc, out, 1), w = (v) => (v / max) * 100;
+    return `<section class="card" aria-labelledby="cash-h">
+      <div class="card-head"><h2 id="cash-h">Arus kas per bulan</h2></div>
+      <div class="cash-rows" role="img" aria-label="Pemasukan ${rp(inc)}, pengeluaran ${rp(out)}, ${net < 0 ? `kurang ${rp(-net)}` : `sisa ${rp(net)}`} per bulan">
+        <div class="cash-row"><span class="cr-l">Pemasukan</span><span class="cr-bar"><i class="c-in" style="width:${Math.max(w(inc), 2)}%"></i></span><b class="num">${rpShort(inc)}</b></div>
+        <div class="cash-row"><span class="cr-l">Pengeluaran</span><span class="cr-bar"><i class="c-exp" style="width:${Math.max(w(exp), 2)}%"></i>${debt ? `<i class="c-debt" style="width:${w(debt)}%"></i>` : ""}</span><b class="num">${rpShort(out)}</b></div>
+      </div>
+      <p class="cash-key"><span><i class="c-exp"></i>Kebutuhan ${rpShort(exp)}</span>${debt ? `<span><i class="c-debt"></i>Cicilan ${rpShort(debt)}</span>` : ""}</p>
+      <div class="cash-net ${net < 0 ? "neg" : "pos"}"><span>${net < 0 ? "Kurang per bulan" : "Sisa per bulan"}</span><b class="num">${net < 0 ? "−" : ""}${rp(Math.abs(net))}</b></div>
+    </section>`;
+  }
+
+  // 6. Tujuan keuangan pengguna + yang perlu dilakukan untuk mencapainya
+  function goalSummary() {
+    const r = S.resilience, g = GOALS.find(k => k.id === r.primaryGoal), m = ms.find(s => s.id === "tujuan");
+    if (!g || !m) return card("Tujuan keuangan", "", `<p class="hint">Belum ada tujuan utama.</p><div>${toProfil("tujuan", "Pilih tujuan di Profil")}</div>`);
+    const others = (r.goals || []).filter(id => id !== r.primaryGoal).map(id => GOALS.find(k => k.id === id)?.label).filter(Boolean);
+    const act = activeStep(), lane = m.x.lane, todo = [];
+    if (m.status === "done") todo.push("Tujuan tercapai. Pertahankan.");
+    else {
+      if (m.goalKind === "pot" && !m.target) todo.push(`Tentukan nominal tujuan di Profil.`);
+      else if (m.goalKind === "pot") todo.push(`Sisihkan ±${rp(m.needPerMonth)} per bulan supaya tercapai ${m.deadline.toLocaleDateString("id-ID", { month: "short", year: "numeric" })}.`);
+      else if (m.goalKind === "debtall") todo.push(lane.months != null ? `Lunasi sisa ${rp(lane.left)}. Perkiraan lunas ${monthYear(lane.months)}.` : `Lunasi sisa ${rp(lane.left)}. Tambah pembayaran supaya utang turun.`);
+      else if (m.gap) todo.push(`${m.gap}.`);
+      if (m.status === "next" && act) todo.push(`Langkah tujuan ada di nomor ${m.number}. Selesaikan dulu langkah ${act.number}: ${act.title}.`);
+    }
+    return `<section class="card" aria-labelledby="gs-h">
+      <div class="card-head"><h2 id="gs-h">Tujuan keuangan</h2>${others.length ? `<p>Juga: ${esc(others.join(", "))}</p>` : ""}</div>
+      <p class="gs-title">${IC.flag}<b>${esc(g.label)}</b><small>${Number(r.goalAmount) ? `${rp(Number(r.goalAmount))} · ` : ""}${r.horizon} bulan</small></p>
+      <span class="fc-meter"><span class="fc-track muted"><i style="width:${Math.max(m.progress, 2)}%"></i></span><b class="num">${m.progress}%</b></span>
+      <p class="sc-lbl">Yang perlu dilakukan</p>
+      <ul class="gs-todo">${todo.map(t => `<li>${esc(t)}</li>`).join("")}</ul>
+    </section>`;
   }
 
   function activeCard(m, doneN) {
@@ -158,37 +261,46 @@
   }
 
   // ---------- Tangga (overview) ----------
+  // Langkah yang belum boleh dikerjakan (setelah langkah aktif): terlihat, tapi tidak bisa dibuka.
+  const isLocked = (m) => m.status === "next" && m.id !== "rapor";
+
   function overview() {
     const act = activeStep(), x = ms[0].x;
     const steps = mainSteps(), doneN = steps.filter(m => m.status === "done").length;
-    const p = Math.round((doneN / steps.length) * 100);
-    const counts = { all: ms.length, done: ms.filter(m => m.status === "done").length, todo: ms.filter(m => m.status !== "done").length };
-    const shown = ms.filter(m => page.filter === "all" || (page.filter === "done" ? m.status === "done" : m.status !== "done"));
+    const p = Math.round((doneN / steps.length) * 100), lane = x.lane.active && !x.lane.done;
     return `<div class="page-head">
         <p class="eyebrow">Tangga milestone</p>
         <h1 class="step-title">${act ? `Langkah ${act.number} dari ${steps.length}: ${esc(act.title)}` : "Semua tangga selesai"}</h1>
-        <p class="step-desc">Naik satu langkah dalam satu waktu. Pelunasan utang berjalan di jalur sendiri, bersamaan dengan langkah lain.</p>
+        <p class="step-desc">Kerjakan berurutan. Langkah berikutnya terbuka setelah langkah sekarang selesai.</p>
+        <div class="ov-prog"><span class="fc-track"><i style="width:${Math.max(p, 2)}%"></i></span><b class="num">${doneN}/${steps.length}</b></div>
       </div>
-      <section class="card viz-card" aria-labelledby="sum-h">
-        <div class="kv" style="margin:0"><span id="sum-h">${doneN} dari ${steps.length} tangga selesai</span><span class="num">${p}%</span></div>
-        <div class="meter" style="background:var(--secondary)" role="progressbar" aria-label="Tangga selesai" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${p}"><span class="meter-fill" style="width:${Math.max(p, 1)}%;background:var(--fg)"></span></div>
-        ${track(act?.id || "")}
-        ${act ? `<a class="act-step" href="#milestone/${act.id}"><span class="mnum">${act.number}</span><span><b>Sekarang: ${esc(act.title)}</b><small>${esc(act.gap || act.short)}</small></span></a>` : `<a class="act-step" href="#rapor"><span class="mnum">${IC.star}</span><span><b>Rapor akhir siap</b><small>Lihat kesimpulan perjalanan Anda</small></span></a>`}
-      </section>
+      <ol class="mlist ${lane ? "has-lane" : ""}">
+        ${lane ? `<li class="lane-legend"><a href="#milestone/utang"><span class="lane-ic">${IC.lane}</span><span><b>Garis ungu = cicil utang</b><small>Berjalan di setiap langkah sampai lunas · ${x.lane.progress}% lunas</small></span><span class="chev" aria-hidden="true">›</span></a></li>` : ""}
+        ${ms.map(row).join("")}
+      </ol>
       ${x.lane.active ? laneCard(x.lane) : ""}
-      <div class="filters" role="group" aria-label="Saring tangga">
-        ${[["all", "Semua"], ["todo", "Belum selesai"], ["done", "Selesai"]].map(([k, l]) => `<button type="button" class="chip" aria-pressed="${page.filter === k}" data-filter="${k}">${l} (${counts[k]})</button>`).join("")}
+      <a class="card score-link" href="#milestone/skor"><span><b>Rincian skor kesehatan</b><small>Poin tiap pilar dan cara menaikkannya</small></span><span class="chev" aria-hidden="true">›</span></a>`;
+  }
+
+  // Rincian skor (dibuka dari Dashboard: skor dan empat pilar)
+  function scorePage() {
+    const x = ms[0].x;
+    return `${crumbs("Rincian skor")}
+      <div class="page-head">
+        <p class="eyebrow">Skor kesehatan finansial</p>
+        <h1 class="step-title">Rincian skor ${x.h.total}/100</h1>
+        <p class="step-desc">Ketuk "Rincian poin" di tiap pilar untuk melihat komponennya.</p>
       </div>
-      <ol class="mlist">${shown.map(row).join("") || `<li class="hint">Belum ada tangga di kelompok ini.</li>`}</ol>`;
+      <div class="stack">${vizPillars(x.h)}${scoreGuide(x)}</div>`;
   }
 
   function laneCard(lane) {
     return `<section class="card viz-card lane-card" aria-labelledby="lane-h">
-      <div class="card-head"><h2 id="lane-h">${IC.lane} Jalur paralel: pelunasan utang</h2><p>Jalan bersamaan dengan tangga lain.</p></div>
+      <div class="card-head"><h2 id="lane-h">${IC.lane} Pelunasan utang</h2><p>Bertahap, di setiap langkah, sampai lunas.</p></div>
       ${lane.done ? `<p class="goal-gap done">${ST_ICON.good}<span>Semua utang lunas</span></p>` : `<p class="goal-gap">${IC.target}<span>Sisa ${rp(lane.left)}${lane.months != null ? ` · perkiraan lunas ${monthYear(lane.months)}` : ""}</span></p>`}
       ${goalBar({ kind: "paid", paid: lane.paid, left: lane.left, fmt: rp })}
       <ul class="checkpoints">${lane.checkpoints.map(k => `<li class="${k.met ? "met" : ""}"><span class="ci">${k.met ? ST_ICON.good : IC.circle}</span><span>${k.label}${!k.met && k.left ? ` <small>· sisa ${rp(k.left)}</small>` : ""}</span></li>`).join("")}</ul>
-      <div><a class="btn sm secondary" href="#milestone/utang">Buka jalur utang</a></div>
+      <div><a class="btn sm lane-btn" href="#milestone/utang">${IC.lane} Buka pelunasan utang</a></div>
     </section>`;
   }
 
@@ -200,7 +312,15 @@
           <small>${esc(m.caption)} Bisa dibuka kapan saja.</small></span>
         <span class="chev" aria-hidden="true">›</span></a></li>`;
     }
-    return `<li><a class="mrow ${m.status}" href="#milestone/${m.id}" aria-label="Langkah ${m.number}: ${esc(m.title)}. ${STATUS_TEXT[m.status]}, ${m.progress}%. ${esc(m.short)}.">
+    const onLane = m.x.lane.active && !m.x.lane.done ? "on-lane" : "";
+    if (isLocked(m)) {
+      return `<li class="${onLane}"><div class="mrow locked" aria-label="Langkah ${m.number}: ${esc(m.title)}. Terkunci, selesaikan langkah sebelumnya dulu.">
+        <span class="lock-mid" aria-hidden="true">${IC.lock}</span>
+        <b class="lk-title">${m.number}. ${esc(m.title)}</b>
+        <small class="lk-goal">${esc(m.short)}</small>
+      </div></li>`;
+    }
+    return `<li class="${onLane}"><a class="mrow ${m.status}" href="#milestone/${m.id}" aria-label="Langkah ${m.number}: ${esc(m.title)}. ${STATUS_TEXT[m.status]}, ${m.progress}%. ${esc(m.short)}.">
       <span class="mnum">${m.status === "done" ? `<span class="ck">${ICON.check}</span>` : m.number}</span>
       <span class="mrow-main">
         <span class="mrow-top"><b>${esc(m.title)}</b>${statusTag(m)}</span>
@@ -223,7 +343,7 @@
   function track(currentId, mini = false) {
     const lane = ms[0].x.lane, n = ms.length;
     const href = (m) => m.id === "rapor" ? "#rapor" : `#milestone/${m.id}`;
-    const nodes = `<ol class="mtrack ${mini ? "mini" : ""}" aria-label="Semua tangga">${ms.map(m => `<li class="${m.status} ${m.id === currentId ? "current" : ""} ${m.id === "rapor" ? "rapor" : ""}">
+    const nodes = `<ol class="mtrack ${mini ? "mini" : ""}" aria-label="Semua tangga">${ms.map(m => isLocked(m) ? `<li class="next locked"><span title="Langkah ${m.number}: terkunci" aria-label="Langkah ${m.number}: ${esc(m.title)}, terkunci"><span class="node">${m.number}</span></span></li>` : `<li class="${m.status} ${m.id === currentId ? "current" : ""} ${m.id === "rapor" ? "rapor" : ""}">
         <a href="${href(m)}" ${m.id === currentId ? 'aria-current="step"' : ""} aria-label="${m.id === "rapor" ? "Rapor" : `Langkah ${m.number}: ${esc(m.title)}`}, ${STATUS_TEXT[m.status]}" data-tip="${m.id === "rapor" ? "Rapor & kesimpulan" : `${m.number}. ${esc(m.title)} · ${m.progress}%`}">
           <span class="node">${m.id === "rapor" ? IC.star : m.status === "done" ? ICON.check : m.number}</span>
         </a></li>`).join("")}</ol>`;
@@ -244,7 +364,7 @@
     const href = (s) => s.id === "rapor" ? "#rapor" : `#milestone/${s.id}`;
     return `<nav class="pager" aria-label="Tangga sebelum dan sesudah">
       ${prev ? `<a href="${href(prev)}"><small>‹ Sebelumnya</small><b>${prev.number}. ${esc(prev.title)}</b></a>` : "<span></span>"}
-      ${next ? `<a class="nx" href="${href(next)}"><small>Berikutnya ›</small><b>${next.id === "rapor" ? "Rapor & kesimpulan" : `${next.number}. ${esc(next.title)}`}</b></a>` : "<span></span>"}
+      ${next ? (isLocked(next) ? `<span class="nx locked"><small>${IC.lock} Berikutnya · terkunci</small><b>${next.number}. ${esc(next.title)}</b></span>` : `<a class="nx" href="${href(next)}"><small>Berikutnya ›</small><b>${next.id === "rapor" ? "Rapor & kesimpulan" : `${next.number}. ${esc(next.title)}`}</b></a>`) : "<span></span>"}
     </nav>`;
   }
 
@@ -252,6 +372,16 @@
     const m = ms.find(s => s.id === id);
     if (!m) return `<div class="page-head"><h1 class="step-title">Tangga tidak ditemukan</h1></div><a class="btn secondary" href="#milestone">Kembali ke semua tangga</a>`;
     const lane = m.x.lane;
+    if (isLocked(m)) {
+      const act = activeStep();
+      return `${crumbs(`Langkah ${m.number} dari ${mainSteps().length}`)}
+        <section class="card locked-page">
+          <span class="lock-mid static" aria-hidden="true">${IC.lock}</span>
+          <h1 class="step-title">${esc(m.title)}</h1>
+          <p class="step-desc">Langkah ini terbuka setelah langkah ${act ? act.number : m.number - 1} selesai.</p>
+          ${act ? `<div><a class="btn sm" href="#milestone/${act.id}">Kerjakan langkah ${act.number}: ${esc(act.title)}</a></div>` : ""}
+        </section>`;
+    }
     return `${crumbs(`Langkah ${m.number} dari ${mainSteps().length}`)}
       <section class="card viz-card">${track(m.id)}</section>
       <div class="page-head">
@@ -478,7 +608,7 @@
         const inner = `<span class="gain">+${pt.max - pt.pts}</span><span><b>${pt.label}</b><small>${esc(pt.value)} · ${esc(pt.tip)}</small></span>${to ? '<span class="chev" aria-hidden="true">›</span>' : ""}`;
         return `<li>${to ? `<a href="#milestone/${to}">${inner}</a>` : `<div>${inner}</div>`}</li>`;
       }).join("")}</ol>
-      <p class="hint">"+N" = poin maksimum yang bisa didapat dari komponen itu. Rincian semua komponen ada di grafik pilar pada Dashboard.</p>
+      <p class="hint">"+N" = poin maksimum yang bisa didapat dari komponen itu. Rincian semua komponen ada di halaman Rincian skor.</p>
     </section>`;
   }
 
@@ -653,21 +783,33 @@
   // ---------- Rapor & kesimpulan ----------
   function conclusions(x) {
     const h = x.h, parts = h.pillars.flatMap(p => p.parts);
-    const strong = parts.filter(p => p.max >= 4 && p.pts >= p.max * 0.8).sort((a, b) => b.max - a.max).slice(0, 3);
+    const strong = parts.filter(p => p.max >= 4 && p.pts >= p.max * 0.8).sort((a, b) => b.max - a.max).slice(0, 4);
     const weak = parts.filter(p => p.pts < p.max).sort((a, b) => (b.max - b.pts) - (a.max - a.pts)).slice(0, 3);
     const act = activeStep();
+    // Prioritas berupa kartu aksi: judul, satu baris keterangan, dan tombol ke tempat mengerjakannya.
     const prio = [];
-    if (act) prio.push(`Selesaikan langkah ${act.number} "${act.title}"${act.gap ? `: ${act.gap.charAt(0).toLowerCase()}${act.gap.slice(1)}` : ""}.`);
-    if (x.alloc.items.length) prio.push(`Bagi sisa ${rp(x.alloc.net)}/bln: ${x.alloc.items.map(i => `${i.label.toLowerCase()} ${rp(i.amount)}`).join(", ")}.`);
-    else if (x.alloc.phase === "minus") prio.push(`Tutup kekurangan ${rp(-x.alloc.net)}/bln dulu. Kurangi pengeluaran atau tambah jam narik.`);
-    if (x.lane.active && !x.lane.done) prio.push(`Jalur utang: sisa ${rp(x.lane.left)}${x.lane.months != null ? `, perkiraan lunas ${monthYear(x.lane.months)}` : ""}. Jangan ambil utang baru.`);
+    if (act) prio.push({ t: `Langkah ${act.number}: ${act.title}`, s: act.gap || act.short, href: `#milestone/${act.id}`, cta: "Buka" });
+    if (x.alloc.items.length) prio.push({ t: `Bagi sisa ${rpShort(x.alloc.net)}/bln`, s: x.alloc.items.map(i => `${i.label} ${rpShort(i.amount)}`).join(" · "), href: "#dashboard", cta: "Lihat" });
+    else if (x.alloc.phase === "minus" && act?.id !== "minus") prio.push({ t: `Tutup kurang ${rpShort(-x.alloc.net)}/bln`, s: "Kurangi pengeluaran atau tambah jam narik", href: "#milestone/minus", cta: "Rencana" });
+    if (x.lane.active && !x.lane.done) prio.push({ t: "Cicil utang", s: `Sisa ${rpShort(x.lane.left)}${x.lane.months != null ? ` · lunas ${monthYear(x.lane.months)}` : ""} · jangan ambil utang baru`, act: "catat", kind: "bayar", cta: "Catat bayar" });
     const summary = {
-      critical: "Kondisi keuangan masih rentan: satu guncangan kecil bisa memaksa berutang. Fokus pada arus kas dan bantalan dulu.",
-      serious: "Keuangan mulai tertata, tetapi masih ada celah besar yang perlu ditutup sebelum aman.",
-      warn: "Keuangan cukup sehat. Tinggal menguatkan bantalan dan konsisten menabung.",
-      good: "Keuangan sehat: arus kas positif, ada bantalan, dan utang terkendali. Pertahankan kebiasaan ini.",
+      critical: "Satu biaya mendadak bisa memaksa berutang. Fokus ke arus kas dan bantalan dulu.",
+      serious: "Mulai tertata, tapi masih ada celah besar sebelum aman.",
+      warn: "Kuatkan bantalan dan konsisten menabung.",
+      good: "Arus kas positif, ada bantalan, utang terkendali.",
     }[h.grade.id];
     return { summary, strong, weak, prio };
+  }
+
+  // Cincin skor: busur sepanjang skor, warna mengikuti kategori.
+  function scoreRing(score, color) {
+    const r = 52, c = 2 * Math.PI * r, len = (clamp(score, 0, 100) / 100) * c;
+    return `<svg class="ring" viewBox="0 0 128 128" role="img" aria-label="Skor ${score} dari 100">
+      <circle cx="64" cy="64" r="${r}" fill="none" stroke="var(--viz-track)" stroke-width="12"/>
+      <circle cx="64" cy="64" r="${r}" fill="none" stroke="${color}" stroke-width="12" stroke-linecap="round" stroke-dasharray="${len} ${c}" transform="rotate(-90 64 64)"/>
+      <text x="64" y="66" text-anchor="middle" class="ring-num">${score}</text>
+      <text x="64" y="88" text-anchor="middle" class="ring-of">dari 100</text>
+    </svg>`;
   }
 
   function rapor() {
@@ -677,69 +819,94 @@
     const days = start ? Math.max(0, Math.round((parseIso(now.d) - parseIso(start.d)) / 864e5)) : 0;
     const k = conclusions(x);
     const sl = S.scoreLog;
-    const cmp = [
-      ["Skor kesehatan", "score", (v) => String(v), 1],
-      ["Sisa per bulan", "net", rp, 1],
-      ["Dana darurat", "emergency", rp, 1],
-      ["Dana darurat (bulan)", "emergencyMonths", (v) => `${String(v).replace(".", ",")} bln`, 1],
-      ["Tabungan tujuan", "goalSaved", rp, 1],
-      ["Total utang", "totalDebt", rp, -1],
-      ["Utang bunga tinggi", "highDebt", rp, -1],
-      ["Porsi cicilan", "dsr", (v) => pct(v), -1],
-      ["BPJS aktif", "bpjs", (v) => `${v} dari 2`, 1],
-    ];
     const ledger = S.ledger.filter(e => !e.undone);
     const total = (types) => ledger.filter(e => types.includes(e.type)).reduce((s, e) => s + (e.amount || 0), 0);
+    const doneN = steps.filter(m => m.status === "done").length;
+    const delta = start ? h.total - start.score : 0;
+    const cmp = [
+      ["Skor", "score", (v) => String(v), 1],
+      ["Sisa / bulan", "net", rpShort, 1],
+      ["Dana darurat", "emergency", rpShort, 1],
+      ["Tabungan tujuan", "goalSaved", rpShort, 1],
+      ["Total utang", "totalDebt", rpShort, -1],
+      ["Utang bunga tinggi", "highDebt", rpShort, -1],
+      ["Porsi cicilan", "dsr", (v) => pct(v), -1],
+      ["BPJS aktif", "bpjs", (v) => `${v}/2`, 1],
+    ];
+    const arrow = (d, dir) => !d ? `<span class="dl same">=</span>` : (d * dir > 0 ? `<span class="dl up">${d > 0 ? "▲" : "▼"}</span>` : `<span class="dl down">${d > 0 ? "▲" : "▼"}</span>`);
     const ai = buildAIContext(), aiJson = JSON.stringify(ai, null, 2);
     return `<div class="page-head">
-        <p class="eyebrow">${final ? "Rapor akhir" : "Rapor sementara"}</p>
-        <h1 class="step-title">Rapor keuangan ${firstName()}</h1>
-        <p class="step-desc">${start ? `Sejak ${fmtShortDate(parseIso(start.d))} (${days} hari).` : ""} ${steps.filter(m => m.status === "done").length} dari ${steps.length} tangga selesai${x.lane.active ? `, jalur utang ${x.lane.progress}%` : ""}. ${final ? "Semua tangga selesai. Ini kesimpulan perjalanan Anda." : "Rapor akhir terbuka setelah semua tangga selesai. Sampai saat itu, Laju memperbarui rapor ini setiap ada catatan baru."}</p>
+        <p class="eyebrow">${final ? "Rapor akhir" : "Rapor sementara"}${start ? ` · ${days} hari sejak ${fmtShortDate(parseIso(start.d))}` : ""}</p>
+        <h1 class="step-title">Rapor ${firstName()}</h1>
       </div>
       <div class="stack">
-        <section class="card viz-card concl" aria-labelledby="cc-h">
-          <div class="card-head"><h2 id="cc-h">Kesimpulan</h2><p>Disusun otomatis dari data Anda.</p></div>
-          <div class="score-now"><span class="hero-num" style="font-size:3rem">${h.total}<small>/100</small></span>${statusPill(h.grade.id, h.grade.label)}</div>
-          <p class="concl-sum">${esc(k.summary)}</p>
-          ${k.strong.length ? `<div><p class="lbl">Yang sudah baik</p><ul class="concl-list good">${k.strong.map(p => `<li>${ST_ICON.good}<span><b>${p.label}</b> <small>· ${esc(p.value)}</small></span></li>`).join("")}</ul></div>` : ""}
-          ${k.weak.length ? `<div><p class="lbl">Yang perlu diperbaiki</p><ul class="concl-list bad">${k.weak.map(p => `<li>${ST_ICON.serious}<span><b>${p.label}</b> <small>· ${esc(p.value)}. ${esc(p.tip)}</small></span></li>`).join("")}</ul></div>` : ""}
-          ${k.prio.length ? `<div><p class="lbl">Prioritas 30 hari ke depan</p><ol class="concl-prio">${k.prio.map(t => `<li>${esc(t)}</li>`).join("")}</ol></div>` : ""}
+        <section class="card rap-hero" aria-label="Ringkasan skor">
+          <div class="rap-top">
+            ${scoreRing(h.total, h.grade.color)}
+            <div class="rap-side">
+              ${statusPill(h.grade.id, h.grade.label)}
+              ${start ? `<p class="rap-delta ${delta > 0 ? "up" : delta < 0 ? "down" : ""}">${delta > 0 ? `▲ +${delta}` : delta < 0 ? `▼ ${delta}` : "= 0"} <small>sejak awal</small></p>` : ""}
+              <p class="rap-sum">${esc(k.summary)}</p>
+            </div>
+          </div>
+          <div class="rap-stats">
+            <div><b class="num">${doneN}/${steps.length}</b><span>Tangga</span></div>
+            <div><b class="num">${x.lane.active ? `${x.lane.progress}%` : "-"}</b><span>Utang lunas</span></div>
+            <div><b class="num">${ledger.length}</b><span>Catatan</span></div>
+          </div>
+          ${sl.length >= 2 ? lineChart([{ label: "Skor", color: "var(--fg)", data: sl.map(p => p.s) }], { yMax: 100, yFmt: (v) => String(Math.round(v)), xFmt: (i) => fmtShortDate(parseIso(sl[i].d)) }) : ""}
         </section>
 
-        <section class="card viz-card" aria-labelledby="sc-h">
-          <div class="card-head"><h2 id="sc-h">Skor dari waktu ke waktu</h2></div>
-          ${start ? `<div class="from-to"><span><small>Awal</small><b>${start.score}</b></span><span aria-hidden="true">→</span><span><small>Sekarang</small><b>${h.total}</b></span>${deltaPill(h.total - start.score, 1, (v) => `${v > 0 ? "+" : ""}${v} poin`)}</div>` : ""}
-          ${sl.length >= 2 ? lineChart([{ label: "Skor", color: "var(--fg)", data: sl.map(p => p.s) }], { yMax: 100, yFmt: (v) => String(Math.round(v)), xFmt: (i) => fmtShortDate(parseIso(sl[i].d)) }) : `<p class="hint">Grafik skor muncul setelah ada catatan di hari lain.</p>`}
+        ${k.prio.length ? `<section class="card" aria-labelledby="fk-h">
+          <div class="card-head"><h2 id="fk-h">Fokus 30 hari</h2></div>
+          <ol class="focus-list">${k.prio.map((p, i) => `<li class="focus-item">
+            <span class="fi-num">${i + 1}</span>
+            <span class="fi-txt"><b>${esc(p.t)}</b><small>${esc(p.s)}</small></span>
+            ${p.href ? `<a class="btn sm" href="${p.href}">${p.cta}</a>` : `<button type="button" class="btn sm" data-act="${p.act}" data-kind="${p.kind}">${p.cta}</button>`}
+          </li>`).join("")}</ol>
+        </section>` : ""}
+
+        <section class="card" aria-labelledby="kd-h">
+          <div class="card-head"><h2 id="kd-h">Kondisi Anda</h2></div>
+          ${k.strong.length ? `<p class="rap-lbl good">${ST_ICON.good} Sudah baik</p>
+          <div class="sw-chips">${k.strong.map(p => `<span class="sw-chip">${esc(p.label)}</span>`).join("")}</div>` : ""}
+          ${k.weak.length ? `<p class="rap-lbl bad">${ST_ICON.serious} Perlu dibenahi</p>
+          <ul class="weak-list">${k.weak.map(p => `<li>
+            <div class="wk-top"><b>${esc(p.label)}</b><span class="num">${p.pts}/${p.max} poin</span></div>
+            <div class="pt-bar"><i style="width:${(p.pts / p.max) * 100}%"></i></div>
+            <small>${esc(p.value)}</small>
+          </li>`).join("")}</ul>` : ""}
         </section>
 
         ${start ? `<section class="card" aria-labelledby="cmp-h">
-          <div class="card-head"><h2 id="cmp-h">Awal vs sekarang</h2><p>Awal = saat onboarding selesai (${fmtShortDate(parseIso(start.d))}).</p></div>
-          <div class="cmp">${cmp.map(([label, key, f, dir]) => `<div class="cmp-row"><span class="cmp-l">${label}</span><span class="cmp-v num">${f(start[key] ?? 0)} → <b>${f(now[key] ?? 0)}</b></span>${deltaPill((now[key] ?? 0) - (start[key] ?? 0), dir)}</div>`).join("")}</div>
+          <div class="card-head"><h2 id="cmp-h">Awal vs sekarang</h2></div>
+          <table class="cmp-table">
+            <thead><tr><th scope="col"></th><th scope="col" class="n">Awal</th><th scope="col" class="n">Sekarang</th><th scope="col"><span class="sr-only">Arah</span></th></tr></thead>
+            <tbody>${cmp.map(([label, key, f, dir]) => {
+              const a = start[key] ?? 0, b = now[key] ?? 0, d = b - a;
+              return `<tr class="${d ? "" : "same"}"><th scope="row">${label}</th><td class="n">${f(a)}</td><td class="n"><b>${f(b)}</b></td><td class="n">${arrow(d, dir)}</td></tr>`;
+            }).join("")}</tbody>
+          </table>
         </section>` : ""}
 
         <section class="card" aria-labelledby="jr-h">
-          <div class="card-head"><h2 id="jr-h">Perjalanan tangga</h2></div>
-          <ol class="journey">${steps.map(m => `<li class="${m.status}"><span class="jn">${m.status === "done" ? ICON.check : m.number}</span><span><b>${esc(m.title)}</b><small>${m.status === "done" ? `Selesai ${S.milestones.doneAt[m.id] ? fmtShortDate(parseIso(S.milestones.doneAt[m.id])) : ""}` : `${m.progress}% · ${esc(m.gap || m.short)}`}</small></span></li>`).join("")}
-            ${x.lane.active ? `<li class="lane ${x.lane.done ? "done" : ""}"><span class="jn">${IC.lane}</span><span><b>Jalur pelunasan utang</b><small>${x.lane.done ? "Semua utang lunas" : `${x.lane.progress}% · sisa ${rp(x.lane.left)}`}</small></span></li>` : ""}</ol>
+          <div class="card-head"><h2 id="jr-h">Perjalanan tangga</h2><p>${doneN} dari ${steps.length} selesai</p></div>
+          <ol class="journey">${steps.map(m => `<li class="${m.status}"><span class="jn">${m.status === "done" ? ICON.check : m.number}</span><span><b>${esc(m.title)}</b><small>${m.status === "done" ? `Selesai${S.milestones.doneAt[m.id] ? ` ${fmtShortDate(parseIso(S.milestones.doneAt[m.id]))}` : ""}` : `${m.progress}%`}</small></span></li>`).join("")}
+            ${x.lane.active ? `<li class="lane ${x.lane.done ? "done" : ""}"><span class="jn">${IC.lane}</span><span><b>Jalur pelunasan utang</b><small>${x.lane.done ? "Semua utang lunas" : `${x.lane.progress}% · sisa ${rpShort(x.lane.left)}`}</small></span></li>` : ""}</ol>
         </section>
 
         <section class="card" aria-labelledby="ac-h">
-          <div class="card-head"><h2 id="ac-h">Aktivitas tercatat</h2></div>
-          <div class="statrow">${stat("Total setoran", rp(total(["deposit", "goal-deposit"])))}${stat("Bayar utang", rp(total(["pay", "paidoff"])))}${stat("Catatan", String(ledger.length))}</div>
-          ${ledger.length ? `<ul class="tx-list">${ledger.slice(-8).reverse().map(e => `<li class="tx"><span class="d">${esc(e.label)}</span><span class="a num">${e.amount ? rp(e.amount) : ""}</span><span class="m">${fmtShortDate(new Date(e.at))}</span></li>`).join("")}</ul>` : `<p class="hint">Belum ada catatan. Catat setoran atau pembayaran di halaman tangga.</p>`}
+          <div class="card-head"><h2 id="ac-h">Aktivitas</h2></div>
+          <div class="rap-stats">
+            <div><b class="num">${rpShort(total(["deposit", "goal-deposit"]))}</b><span>Disetor</span></div>
+            <div><b class="num">${rpShort(total(["withdraw"]))}</b><span>Diambil</span></div>
+            <div><b class="num">${rpShort(total(["pay", "paidoff"]))}</b><span>Bayar utang</span></div>
+          </div>
+          ${ledger.length ? `<ul class="tx-list">${ledger.slice(-5).reverse().map(e => `<li class="tx"><span class="d">${esc(e.label)}</span><span class="a num">${e.amount ? rp(e.amount) : ""}</span><span class="m">${fmtShortDate(new Date(e.at))}</span></li>`).join("")}</ul>` : `<p class="hint">Belum ada catatan. Tekan <b>+ Catat</b> saat ada setoran atau bayar utang.</p>`}
         </section>
 
-        <section class="card" aria-labelledby="ai-h">
-          <div class="card-head"><h2 id="ai-h">Data untuk analisis AI</h2><p>Tanpa nama, nomor HP, atau password.</p></div>
-          <details class="more"><summary>Lihat data (${(aiJson.length / 1024).toFixed(1).replace(".", ",")} KB)</summary><pre class="ai-json">${esc(aiJson)}</pre></details>
-        </section>
+        <details class="card more ai-card"><summary>Data untuk analisis AI <small>(${(aiJson.length / 1024).toFixed(1).replace(".", ",")} KB, tanpa nama, HP, password)</small></summary><pre class="ai-json">${esc(aiJson)}</pre></details>
       </div>`;
-  }
-
-  function deltaPill(d, dir, f = null) {
-    if (!d) return `<span class="st neutral">tetap</span>`;
-    const good = d * dir > 0;
-    return `<span class="st ${good ? "good" : "critical"}">${good ? ST_ICON.good : ST_ICON.critical}${f ? f(d) : good ? "membaik" : "memburuk"}</span>`;
   }
 
   // ---------- Konfirmasi → catat → urungkan ----------
@@ -795,6 +962,7 @@
     const m = currentStep(), x = ms[0]?.x;
     switch (name) {
       case "demo": return loadDemo();
+      case "logout": setLoggedIn(false); location.href = "masuk.html"; return;
       case "catat": return openCatat(el.dataset.kind, el.dataset.i != null ? Number(el.dataset.i) : null);
       case "save-monthly": {
         const v = moneyVal("upd-monthly"), now = Number(S.resilience.monthlySave) || 0;
@@ -813,6 +981,18 @@
   }
 
   // ---------- Profil: data yang jarang berubah ----------
+  const svg = (d) => `<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${d}</svg>`;
+  const SECTION_ICON = {
+    identitas: svg('<rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="9" cy="11" r="2"/><path d="M6 16c.6-1.4 1.7-2 3-2s2.4.6 3 2M14 10h4M14 14h3"/>'),
+    kerja: svg('<circle cx="6" cy="17" r="3"/><circle cx="18" cy="17" r="3"/><path d="M9 17h6l-3-7h4l2 3M12 10 10 6H7"/>'),
+    keluarga: svg('<circle cx="8" cy="8" r="3"/><circle cx="17" cy="9" r="2.5"/><path d="M3 20c0-3 2.2-5 5-5s5 2 5 5M14 20c0-2.4 1.3-4 3-4s3 1.6 3 4"/>'),
+    uang: svg('<path d="M3 10 12 4l9 6"/><path d="M5 10v8M9.5 10v8M14.5 10v8M19 10v8M3 20h18"/>'),
+    ewallet: svg('<rect x="6" y="2.5" width="12" height="19" rx="2.5"/><path d="M10 18h4M9 9.5l2 2 4-4"/>'),
+    proteksi: svg('<path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10Z"/><path d="M12 8v6M9 11h6"/>'),
+    keuangan: svg('<path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/>'),
+    utang: svg('<path d="M6 2h12v20l-3-2-3 2-3-2-3 2Z"/><path d="M9 7h6M9 11h6M9 15h3"/>'),
+    tujuan: svg('<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1.5"/>'),
+  };
   function profilePage() {
     const p = S.profile, r = S.resilience, c = calc(), ch = channelStatus(c.agg);
     const openDebts = S.debts.filter(debtOpen), goal = GOALS.find(g => g.id === r.primaryGoal)?.label;
@@ -834,7 +1014,7 @@
         <p class="step-desc">Hidup berubah? Ubah di sini. Uang berpindah? Tekan <b>+ Catat</b>.</p>
       </div>
       <div class="stack">
-        <section class="card prof-list" aria-label="Bagian profil">${PROFILE_SECTIONS.map(sec => `<a class="prow" href="${editUrl(sec.id)}"><span class="prow-txt"><b>${sec.title}</b><small>${esc(sum[sec.id])}</small></span><span class="chev" aria-hidden="true">›</span></a>`).join("")}</section>
+        <section class="card prof-list" aria-label="Bagian profil">${PROFILE_SECTIONS.map(sec => `<a class="prow" href="${editUrl(sec.id)}"><span class="prow-ic ic-${sec.id}" aria-hidden="true">${SECTION_ICON[sec.id]}</span><span class="prow-txt"><b>${sec.title}</b><small>${esc(sum[sec.id])}</small></span><span class="chev" aria-hidden="true">›</span></a>`).join("")}</section>
         <section class="card" aria-labelledby="awal-h">
           <div class="card-head"><h2 id="awal-h">Jawaban awal</h2><p>Titik awal rapor, tidak bisa diubah.</p></div>
           <dl class="kv-list">
@@ -844,10 +1024,7 @@
             <div><dt>Tabungan awal</dt><dd class="num">${start ? rp(start.emergency) : "-"}</dd></div>
           </dl>
         </section>
-        <section class="card" aria-labelledby="uji-h">
-          <div class="card-head"><h2 id="uji-h">Uji coba</h2></div>
-          <div><button type="button" class="btn sm secondary" data-act="demo">Ganti dengan data contoh</button></div>
-        </section>
+        ${S.account.pass ? `<div><button type="button" class="btn secondary sm" data-act="logout">Keluar dari akun</button></div>` : ""}
       </div>`;
   }
 
@@ -932,6 +1109,7 @@
   });
   catatDlg.addEventListener("keydown", (e) => { if (e.key === "Enter" && e.target.matches("#catat-amt")) { e.preventDefault(); catatDlg.querySelector("[data-cgo]")?.click(); } });
   $("#catatBtn").addEventListener("click", () => openCatat());
+  $("#demoBtn").addEventListener("click", loadDemo);
 
   // ---------- Events ----------
   window.addEventListener("hashchange", () => {
@@ -992,12 +1170,15 @@
     S.consent.useManual = true;
     for (const key of Object.keys(sim)) delete sim[key];
     S.startSnap = snapshotMetrics();
+    S.account.pass = await hashPass(S.account.password || "contoh1234");   // data contoh juga bisa keluar lalu masuk lagi
+    setLoggedIn(true);
     save(); render();
     snack("Data contoh dipakai");
   }
 
   // ---------- Boot ----------
   async function boot() {
+    if (needsLogin()) { location.replace("masuk.html"); return; }   // akun ada, tapi sedang keluar
     render();
     try { const f = sessionStorage.getItem("laju-flash"); if (f) { sessionStorage.removeItem("laju-flash"); snack(f); } } catch (e) { /* abaikan */ }
     try {   // segarkan ringkasan e-wallet dari server bila tersedia

@@ -353,4 +353,7 @@ details.cf-calc[open] summary::after { transform: translateY(1px) rotate(-135deg
 .checks-sum svg { width: 18px; height: 18px; flex: none; color: var(--st-serious-ink); }
 
 /* mode ubah satu bagian Profil (onboarding.html?edit=...) */
-body.editing .pills, body.editing .progress, body.editing #demoBtn, body.editing #resetBtn { display: none; }
+body.editing .pills, body.editing .progress, body.editing #demoBtn { display: none; }
+
+#doneBtn { display: none; }
+body.editing #doneBtn { display: inline-flex; color: var(--fg); font-weight: 800; }

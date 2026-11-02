@@ -24,7 +24,7 @@
         </a>
         <div id="serverStatus" class="server-status" data-state="checking" role="status" aria-live="polite"></div>
       </div>
-      <a class="btn sm" href="onboarding.html">Daftar gratis</a>
+      <div class="auth-actions"><div class="lang-sw" role="group" aria-label="Bahasa"><button type="button" data-lang="id">ID</button><button type="button" data-lang="en">EN</button></div><button type="button" class="ghost-btn icon-only" data-reload aria-label="Reset semua" title="Reset semua dari awal"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a9 9 0 1 1-2.64-6.36"/><path d="M21 3v6h-6"/></svg></button><a class="btn sm" href="onboarding.html">Daftar</a><a class="btn sm secondary" href="masuk.html">Masuk</a></div>
     </div>
   </header>
 
@@ -89,6 +89,9 @@
   <footer class="site">
     <div class="wrap wide">Laju · prototipe riset tim NUS untuk APRU 2026 Hackathon: Financial Health Frontiers.</div>
   </footer>
+  <script src="i18n-en.js"></script>
+  <script src="i18n.js"></script>
+  <script src="muat-ulang.js"></script>
   <script type="module">
     import { startServerStatus } from "./server-status.js";
     startServerStatus(document.getElementById("serverStatus"), {

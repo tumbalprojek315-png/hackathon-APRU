@@ -192,6 +192,20 @@
 
   // ---------- Utils ----------
   const $ = (s, r = document) => r.querySelector(s);
+
+  // ---------- Masuk akun (prototipe: satu akun per perangkat) ----------
+  // Password tidak pernah disimpan. Yang disimpan hanya hash PBKDF2 + salt acak, cukup untuk mencocokkan saat masuk.
+  const LOGIN_KEY = "laju-login";
+  const b64 = (buf) => btoa(String.fromCharCode(...new Uint8Array(buf)));
+  async function hashPass(pw, salt = b64(crypto.getRandomValues(new Uint8Array(16)))) {
+    const key = await crypto.subtle.importKey("raw", new TextEncoder().encode(pw), "PBKDF2", false, ["deriveBits"]);
+    const bits = await crypto.subtle.deriveBits({ name: "PBKDF2", hash: "SHA-256", salt: Uint8Array.from(atob(salt), ch => ch.charCodeAt(0)), iterations: 100000 }, key, 256);
+    return { salt, hash: b64(bits) };
+  }
+  const isLoggedIn = () => { try { return localStorage.getItem(LOGIN_KEY) === "1"; } catch (e) { return true; } };
+  const setLoggedIn = (on) => { try { if (on) localStorage.setItem(LOGIN_KEY, "1"); else localStorage.removeItem(LOGIN_KEY); } catch (e) { /* abaikan */ } };
+  const phoneDigits = (s) => String(s || "").replace(/\D/g, "").replace(/^62/, "0");
+  const needsLogin = () => S.finished && !!S.account.pass && !isLoggedIn();
   const esc = (v) => String(v ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
   const fmt = (n) => Math.round(n || 0).toLocaleString("id-ID");
   const rp = (n) => (n < 0 ? "−Rp" : "Rp") + fmt(Math.abs(n));
@@ -1330,4 +1344,21 @@ income: { perPlatform: { gojek: 160000, grab: 110000 }, bonus: 400000, tips: 150
       history: { start: S.startSnap, scoreLog: S.scoreLog.slice(-30) },
       excludedForPrivacy: ["nama lengkap", "nomor HP", "username", "password", "area narik detail", "token e-wallet"],
     };
+  }
+
+  // Panel bawah menempel di tepi bawah layar yang terlihat. Di browser HP, bilah alamat yang muncul saat
+  // menggulir ke atas memperkecil layar terlihat. Selisihnya dipakai untuk mengangkat panel. Selisih besar
+  // berarti keyboard terbuka: panel dibiarkan di belakang keyboard.
+  if (typeof window !== "undefined" && window.visualViewport) {
+    const vv = window.visualViewport;
+    const pin = () => {
+      const gap = Math.round(window.innerHeight - vv.height - vv.offsetTop);
+      document.documentElement.style.setProperty("--vv-gap", `${gap > 0 && gap < 150 ? gap : 0}px`);
+    };
+    vv.addEventListener("resize", pin);
+    vv.addEventListener("scroll", pin);
+    window.addEventListener("scroll", pin, { passive: true });
+    window.addEventListener("resize", pin);
+    window.addEventListener("load", pin);
+    pin();
   }

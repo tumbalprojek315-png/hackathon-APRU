@@ -90,3 +90,18 @@ Masalah: data yang sama bisa diubah di beberapa tempat (Ubah data, kartu di Tang
 Dihapus: "Perbarui angka bulan ini" di Tangga (angka ganda), tombol Ubah data & Data contoh di header (Data contoh pindah ke Profil dengan konfirmasi), koreksi total tabungan (diganti Ambil tabungan). Pengguna yang sudah selesai dan membuka onboarding.html langsung diarahkan ke Profil.
 
 Diuji: Keuangan bulanan (2 langkah, kartu utang tersembunyi, Simpan + pesan), Batal di Daftar utang (angka kembali), 6 bagian lain (kartu tepat, tanpa password), Identitas tersimpan tanpa password, + Catat setor/ambil/bayar lunas (konfirmasi, skor live), Tangga tanpa form pengubah data, hubungkan DANA dari Profil lewat halaman penyedia (mode ubah bertahan setelah kembali), onboarding.html dialihkan ke Profil, pengguna baru tetap bisa menyelesaikan onboarding. Uji hitungan & skor contoh tidak berubah.
+
+## F. Revisi 2 Nov: penekanan visual, bahasa EN, panel bawah
+
+| Permintaan | Yang dikerjakan |
+|---|---|
+| Tombol di kanan atas seperti dulu | Data contoh dan tombol bahasa kembali di header kanan atas |
+| Panel bawah selalu terlihat | Penyebab: di browser HP, bilah alamat yang muncul saat menggulir ke atas memotong 24px bagian bawah layar, jadi panel tertutup sebagian. Sekarang panel (dan bilah Lanjut di onboarding) diangkat sebesar selisih itu lewat `visualViewport` (`core.js`, variabel CSS `--vv-gap`). Saat keyboard terbuka panel tetap di belakang keyboard |
+| Penanda di tiap bagian Profil | Ikon berwarna per bagian |
+| Setelah satu bagian selesai, lanjut ke bagian berikutnya | Tombol "Simpan & lanjut" membuka bagian Profil berikutnya. Tombol Selesai di header untuk berhenti kapan saja |
+| Bahasa EN / ID | Tombol ID / EN di header semua halaman. Teks sumber tetap bahasa Indonesia. `i18n.js` menerjemahkan teks yang tampil (termasuk yang muncul belakangan) memakai kamus `i18n-en.js` (sekitar 1.000 entri + pola untuk teks berisi nama). Angka, uang, dan tanggal ikut diformat: "Rp6,7 jt" jadi "Rp6.7M", "Okt" jadi "Oct". Pilihan bahasa disimpan di perangkat |
+| Rapor lebih mudah dibaca | Cincin skor, perubahan sejak awal, 3 angka utama, Fokus 30 hari berupa kartu aksi bernomor, kondisi baik dan lemah dengan bar poin, tabel awal vs sekarang dengan panah |
+
+Diuji: semua halaman aplikasi (3 data contoh, dengan dan tanpa e-wallet), semua langkah onboarding, 9 bagian Profil, dialog Catat, dan landing dalam mode EN. Pemindai teks sisa tidak menemukan teks Indonesia selain nama merek dan deskripsi transaksi dari e-wallet. Panel bawah diuji di layar 375x812 dengan bilah alamat: tepi bawah panel tepat di tepi layar. Uji hitungan dan skor contoh tidak berubah (25, 50, 93).
+
+Menambah teks baru: tulis dalam bahasa Indonesia seperti biasa, lalu tambahkan terjemahannya di `public/i18n-en.js`. Angka ditulis sebagai `{0}`, `{1}`. Teks yang belum ada di kamus tetap tampil dalam bahasa Indonesia, tidak error.

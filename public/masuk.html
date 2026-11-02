@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="id">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Masuk · Laju</title>
+  <meta name="description" content="Masuk ke akun Laju dengan nomor HP dan password.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="components.css">
+  <link rel="stylesheet" href="server-status.css">
+  <link rel="stylesheet" href="portrait.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="wrap topbar-row">
+      <div class="brand-group">
+        <a class="brand" href="index.html" aria-label="Laju, beranda">
+          <span class="brand-mark" aria-hidden="true">
+            <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12h4l3 7 4-14 3 7h4"/></svg>
+          </span>
+          Laju
+        </a>
+        <div id="serverStatus" class="server-status" data-state="checking" role="status" aria-live="polite"></div>
+      </div>
+      <div class="auth-actions">
+        <div class="lang-sw" role="group" aria-label="Bahasa"><button type="button" data-lang="id">ID</button><button type="button" data-lang="en">EN</button></div>
+        <button type="button" class="ghost-btn icon-only" data-reload aria-label="Reset semua" title="Reset semua dari awal"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a9 9 0 1 1-2.64-6.36"/><path d="M21 3v6h-6"/></svg></button>
+      </div>
+    </div>
+  </header>
+
+  <main>
+    <div class="wrap login-wrap">
+      <div class="page-head">
+        <p class="eyebrow">Akun</p>
+        <h1 class="step-title">Masuk ke Laju</h1>
+        <p class="step-desc">Pakai nomor HP dan password yang Anda buat saat daftar.</p>
+      </div>
+      <div class="note accent" id="noAccount" hidden></div>
+      <form class="card" id="loginForm" novalidate>
+        <div class="field">
+          <label for="lgPhone">Nomor HP (WhatsApp)</label>
+          <input class="input" id="lgPhone" type="tel" inputmode="tel" autocomplete="tel" placeholder="08xxxxxxxxxx">
+        </div>
+        <div class="field">
+          <label for="lgPass">Password</label>
+          <div class="input-wrap">
+            <input class="input" id="lgPass" type="password" autocomplete="current-password" placeholder="••••••••">
+            <button type="button" id="lgShow" aria-label="Tampilkan password"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/></svg></button>
+          </div>
+        </div>
+        <p class="err" id="loginErr" role="alert" hidden></p>
+        <button class="btn block" type="submit" id="loginBtn">Masuk</button>
+      </form>
+      <p class="hint login-hint">Belum punya akun? <a href="onboarding.html">Daftar</a></p>
+    </div>
+  </main>
+
+  <script src="core.js"></script>
+  <script src="i18n-en.js"></script>
+  <script src="i18n.js"></script>
+  <script src="masuk.js"></script>
+  <script src="muat-ulang.js"></script>
+  <script type="module">
+    import { startServerStatus } from "./server-status.js";
+    startServerStatus(document.getElementById("serverStatus"), {
+      wsPath: null,   // server Python ini tanpa WebSocket: cukup ping /__health tiap 2 detik
+      labels: { live: "LIVE", offline: "OFFLINE", checking: "MENGECEK" },
+      titles: {
+        live: (ms, time) => `Server berjalan · menjawab dalam ${ms} md · dicek ${time}`,
+        offline: (reason, time) => `Server tidak menjawab${reason ? ` (${reason})` : ""} · dicek ${time}`,
+      },
+    });
+  </script>
+</body>
+</html>

@@ -91,7 +91,7 @@
     const sq = seq();
     return `
     <div class="${ui.enter ? "step-enter" : ""}">
-      <p class="eyebrow">${ui.edit ? `Profil · ${ui.edit.sec.title}${ui.edit.sec.steps.length > 1 ? ` · ${ui.edit.idx + 1} dari ${ui.edit.sec.steps.length}` : ""}` : `Langkah ${sq.indexOf(S.step) + 1} dari ${sq.length}`}</p>
+      <p class="eyebrow">${ui.edit ? `Profil ${PROFILE_SECTIONS.indexOf(ui.edit.sec) + 1}/${PROFILE_SECTIONS.length} · ${ui.edit.sec.title}${ui.edit.sec.steps.length > 1 ? ` · ${ui.edit.idx + 1}/${ui.edit.sec.steps.length}` : ""}` : `Langkah ${sq.indexOf(S.step) + 1} dari ${sq.length}`}</p>
       <h1 class="step-title">${title}</h1>
       <p class="step-desc">${desc}</p>
       <div class="stack">${body}</div>
@@ -181,6 +181,7 @@
         </div>
         ${a.city === "Lainnya" ? otherIn("account.cityOther", "cityOther", "Nama kota / kabupaten Anda", "misal: Siak, Kampar, Bengkalis", "lainnya", !!e.cityOther) : ""}
       `, "part-identitas") +
+      (ui.edit ? "" : `<p class="hint login-hint">Sudah punya akun? <a href="masuk.html">Masuk</a></p>`) +
       card("", "", `<div style="display:flex;gap:14px;align-items:flex-start">${ICON.shield}<p style="font-size:.9rem;line-height:1.55"><strong>Laju bukan aplikasi pinjaman.</strong> Kami tidak menjual data Anda. Semua data hanya dipakai untuk menyusun gambaran keuangan Anda sendiri, dan Anda bisa menghapusnya kapan saja.</p></div>`, "peach part-intro")
     );
   };
@@ -596,7 +597,7 @@
     const hardGate = STEPS[S.step].id === "izin" && !valid;   // izin: tombol benar-benar terkunci
     $("#backBtn").style.visibility = ui.edit || prevIdx(S.step) !== S.step ? "visible" : "hidden";
     $("#backLabel").textContent = ui.edit ? "Batal" : "Kembali";
-    $("#nextLabel").textContent = ui.edit ? (editNextIdx() < 0 ? "Simpan" : "Lanjut") : last ? (S.finished ? "Simpan & kembali ke dashboard" : "Simpan & selesai") : "Lanjut";
+    $("#nextLabel").textContent = ui.edit ? (editNextIdx() >= 0 ? "Lanjut" : nextSection() ? "Simpan & lanjut" : "Simpan") : last ? (S.finished ? "Simpan & kembali ke dashboard" : "Simpan & selesai") : "Lanjut";
     $("#nextBtn").disabled = hardGate;
     $("#nextBtn").setAttribute("aria-disabled", String(!valid));
     $("#nextBtn").style.opacity = valid ? "1" : ".5";
@@ -814,7 +815,6 @@
       case "addPlatform": if (!S.profile.platforms.includes(id)) S.profile.platforms.push(id); save(); render(true); break;
       case "addDebt": S.debts.push({ type: "", remaining: 0, months: "", rate: "", due: "" }); save(); render(true); break;
       case "removeDebt": S.debts.splice(Number(id), 1); ui.adder = Object.fromEntries(Object.entries(ui.adder).filter(([k]) => !k.startsWith("debt:"))); save(); render(true); break;
-      case "reset": resetAll(); break;
     }
   }
 
@@ -1020,8 +1020,8 @@
       if (b !== -1) { toast(`Lengkapi langkah "${STEPS[b].label}" dulu.`); go(b); return; }
       S.finished = true; S.finishedAt = S.finishedAt || new Date().toISOString();
       if (!S.startSnap) S.startSnap = snapshotMetrics();   // titik awal untuk rapor "awal vs sekarang"
-      save();
-      location.href = "app.html#dashboard";
+      // akun jadi: simpan hash password (bukan passwordnya), lalu langsung dianggap sudah masuk
+      hashPass(S.account.password).then(p => { S.account.pass = p; setLoggedIn(true); save(); location.href = "app.html#dashboard"; });
       return;
     }
     go(nextIdx(S.step));
@@ -1059,16 +1059,6 @@
     S.wallets = []; ui.openTx = null; ui.walletError = "";
   }
 
-  async function resetAll() {
-    const ok = await confirmBox({ title: "Mulai ulang dari awal?", body: "Semua isian dihapus dan e-wallet yang terhubung diputus. Ini tidak bisa dibatalkan.", ok: "Ya, mulai ulang", danger: true });
-    if (!ok) return;
-    dropAllWallets();
-    try { localStorage.removeItem(KEY); } catch (e) { /* ignore */ }
-    S = fresh(); ui.analysisIdx = 0;
-    go(0);
-    toast("Semua isian dihapus");
-  }
-  $("#resetBtn").addEventListener("click", resetAll);
 
   $("#demoBtn").addEventListener("click", () => {
     const keep = { step: S.step, maxStep: STEPS.length - 1, wallets: S.wallets };
@@ -1172,15 +1162,28 @@
       || (parts.includes("tujuan") && (!r.goals.length ? "Pilih minimal satu tujuan." : !r.primaryGoal ? "Pilih tujuan yang paling penting." : r.wantsBankLoan == null ? "Jawab rencana pinjaman resmi." : ""));
     return msg ? { x: msg } : {};
   }
-  function editNext() {
+  const nextSection = () => PROFILE_SECTIONS[PROFILE_SECTIONS.indexOf(ui.edit.sec) + 1];
+  function editCheck() {
     const errs = editErrors();
-    if (Object.keys(errs).length) {
-      ui.showErrors = true; render(true);
-      return toast(errs.x || errs.fullName || errs.phone || errs.username || errs.city || errs.cityOther || "Lengkapi bagian wajib dulu");
-    }
+    if (!Object.keys(errs).length) return true;
+    ui.showErrors = true; render(true);
+    toast(errs.x || errs.fullName || errs.phone || errs.username || errs.city || errs.cityOther || "Lengkapi bagian wajib dulu");
+    return false;
+  }
+  // Lanjut: langkah berikutnya di bagian ini, lalu bagian Profil berikutnya. Bagian terakhir kembali ke Profil.
+  function editNext() {
+    if (!editCheck()) return;
     [...stepEl.querySelectorAll("[data-adder]")].filter(x => x.value.trim()).forEach(x => addCustom(x.dataset.adder, { silent: true }));
     const i = editNextIdx();
     if (i >= 0) { ui.edit.idx = i; ss.set("laju-edit-idx", String(i)); ui.enter = true; ui.showErrors = false; save(); render(); window.scrollTo({ top: 0 }); return; }
+    const nxt = nextSection();
+    endEdit(`${ui.edit.sec.title} disimpan`);
+    location.href = nxt ? editUrl(nxt.id) : "app.html#profil";
+  }
+  // Selesai (kanan atas): simpan bagian ini lalu kembali ke Profil.
+  function editDone() {
+    if (!editCheck()) return;
+    [...stepEl.querySelectorAll("[data-adder]")].filter(x => x.value.trim()).forEach(x => addCustom(x.dataset.adder, { silent: true }));
     endEdit(`${ui.edit.sec.title} disimpan`);
     location.href = "app.html#profil";
   }
@@ -1204,7 +1207,10 @@
 
   // ---------- Boot ----------
   async function boot() {
+    if (needsLogin()) { location.replace("masuk.html"); return; }   // akun sudah ada tapi sedang keluar
     ui.edit = initEdit();
+    const flash = ss.get("laju-flash"); if (flash && ui.edit) { ss.del("laju-flash"); setTimeout(() => toast(flash), 300); }
+    $("#doneBtn").addEventListener("click", editDone);
     const qs = new URLSearchParams(location.search);
     const link = qs.get("link"), linkedId = qs.get("wallet");
     if (link) {
