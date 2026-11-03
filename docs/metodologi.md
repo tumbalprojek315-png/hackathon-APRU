@@ -99,7 +99,7 @@ Progres 100% hanya muncul bila **semua** syarat wajib terpenuhi, jadi pembulatan
 
 ### Rencana setoran adaptif
 
-Slider "Setor per hari narik" bergerak dari **Rp1.000** sampai **rata-rata pendapatan ojol per hari** (jumlah pendapatan per aplikasi. Kalau kosong, dipakai rata-rata mingguan atau pendapatan bulanan ÷ hari kerja), dengan langkah Rp1.000. Tombol cepat 5% / 10% / 20% dari pendapatan harian. Nilai awalnya diambil dari pembagian sisa uang bulan ini.
+Slider "Setor per hari narik" bergerak dari **Rp1.000** sampai **rata-rata pendapatan ojol per hari** (jumlah pendapatan per aplikasi. Kalau kosong, dipakai rata-rata harian sebulan terakhir atau pendapatan bulanan ÷ hari kerja), dengan langkah Rp1.000. Tombol cepat 5% / 10% / 20% dari pendapatan harian. Nilai awalnya diambil dari pembagian sisa uang bulan ini.
 
 ## 4. Jalur paralel: pelunasan utang
 

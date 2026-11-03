@@ -133,7 +133,7 @@
         else if (!p.recordsIncome) errs.x = "Jawab seberapa sering Anda mencatat pendapatan.";
         break;
       case "izin":
-        if (!c.useWallet && !c.useManual) errs.x = "Pilih minimal satu cara mengisi data.";
+        if (c.useWallet == null) errs.x = "Pilih apakah Anda mau menghubungkan e-wallet.";
         else if (!c.agreeTerms || !c.agreeDataUse) errs.x = "Centang kedua persetujuan untuk lanjut.";
         break;
       case "ewallet":
@@ -144,7 +144,7 @@
       case "pendapatan": {
         const v = volatility();
         if (!p.platforms.some(id => Number(inc.perPlatform[id]) > 0)) errs.x = "Isi pendapatan bersih harian minimal satu aplikasi.";
-        else if (!(Number(inc.weekAvg) > 0)) errs.x = "Isi rata-rata pendapatan harian minggu ini.";
+        else if (!(Number(inc.weekAvg) > 0)) errs.x = "Isi rata-rata pendapatan harian sebulan terakhir.";
         else if (!(Number(inc.best) > 0)) errs.x = "Isi pendapatan hari paling ramai.";
         else if (v.ready && !v.ordered) errs.x = "Rata-rata harus di antara hari paling sepi dan hari paling ramai.";
         break;
@@ -249,34 +249,23 @@
     return sug.length ? `<p class="hint">Saran dari aplikasi Anda: ${sug.map(channelLabel).join(", ")}. <button type="button" class="link-btn inline" data-action="suggestChannels">Pilih saran</button></p>` : "";
   }
 
+  // Isian manual selalu dipakai. Di sini pengguna hanya memilih: hubungkan e-wallet atau tidak.
   R.izin = () => {
     const c = S.consent;
-    const box = `<span class="box">${ICON.check}</span>`;
-    return shell("Izin Anda dulu, sebelum kami menyentuh data apa pun", "Pilih salah satu atau keduanya.", `
-      <div class="grid2">
-        <button type="button" class="choice" aria-pressed="${c.useWallet}" data-switch="consent.useWallet">
-          <span class="kicker">${box} Disarankan</span>
-          <h3>Hubungkan e-wallet saya</h3>
-          <ul>
-            <li><span aria-hidden="true">✓</span><span>Riwayat transaksi 6 bulan otomatis terbaca & dikategorikan</span></li>
-            <li><span aria-hidden="true">✓</span><span>Data berstatus <strong>Terverifikasi</strong>, bisa jadi bukti penghasilan</span></li>
-            <li><span aria-hidden="true">✓</span><span>Grafik pertumbuhan pendapatan yang bisa dipercaya bank</span></li>
-          </ul>
-          <span class="foot">Lewat ${providerName()}, penyedia open finance berlisensi. Akses hanya baca, tidak bisa memindahkan uang Anda.</span>
-        </button>
-        <button type="button" class="choice manual" aria-pressed="${c.useManual}" data-switch="consent.useManual">
-          <span class="kicker">${box} Isi manual</span>
-          <h3>Saya isi sendiri</h3>
-          <ul>
-            <li><span aria-hidden="true">✓</span><span>Semua fitur pencatatan & tangga milestone tetap jalan</span></li>
-            <li><span aria-hidden="true">✓</span><span>Bisa melengkapi uang tunai yang tidak lewat e-wallet</span></li>
-            <li class="dim"><span aria-hidden="true">-</span><span>Kalau tanpa e-wallet, data berlabel <strong>Belum terverifikasi</strong></span></li>
-          </ul>
-          <span class="foot">Anda bisa menghubungkan e-wallet nanti. Data lama tetap ada dan diberi tanggal mulai verifikasi.</span>
-        </button>
-      </div>
-      ${c.useManual && !c.useWallet ? `<div class="note accent">${ICON.info}<span>Tanpa e-wallet, data berlabel belum terverifikasi dan laporan untuk bank terkunci.</span></div>` : ""}
-      ${c.useManual && c.useWallet ? `<div class="note">${ICON.info}<span>Transaksi e-wallet menjadi bukti. Isian manual melengkapi pemasukan dan pengeluaran tunai.</span></div>` : ""}
+    const pick = (val, title, caption) => `<button type="button" class="opt single" aria-pressed="${c.useWallet === (val === "ya")}" data-action="walletChoice" data-id="${val}">
+      <span class="box">${ICON.check}</span><span><b>${title}</b><small>${caption}</small></span></button>`;
+    return shell("Hubungkan e-wallet?", "Data yang Anda isi sendiri selalu dipakai. E-wallet menjadi buktinya.", `
+      ${card("Kalau e-wallet dihubungkan", "", `
+        <ul class="check-list">
+          <li><span aria-hidden="true">✓</span><span>Riwayat transaksi 6 bulan otomatis terbaca & dikategorikan</span></li>
+          <li><span aria-hidden="true">✓</span><span>Data berstatus <strong>Terverifikasi</strong>, bisa jadi bukti penghasilan</span></li>
+          <li><span aria-hidden="true">✓</span><span>Akses hanya baca lewat ${providerName()}. Tidak bisa memindahkan uang Anda</span></li>
+        </ul>
+        <div class="grid2">
+          ${pick("ya", "Ya, hubungkan", "Disarankan")}
+          ${pick("tidak", "Tidak sekarang", "Bisa dihubungkan nanti lewat Profil")}
+        </div>
+        ${c.useWallet === false ? `<div class="note accent">${ICON.info}<span>Tanpa e-wallet, data berlabel belum terverifikasi dan laporan untuk bank terkunci.</span></div>` : ""}`)}
       ${card("Persetujuan penggunaan data", "Centang keduanya untuk lanjut.", `
         ${checkbox("consent.agreeTerms", "Saya setuju dengan <strong>Syarat Layanan</strong> Laju dan mengerti Laju bukan pemberi pinjaman.")}
         ${checkbox("consent.agreeDataUse", "Saya izinkan data saya diproses <strong>hanya untuk analisis keuangan pribadi saya</strong>. Data tidak dibagikan ke pihak lain tanpa izin baru dari saya, termasuk ke bank.")}
@@ -304,8 +293,7 @@
         ${stat("Keluar non-tunai", rp(agg.expenseTotal + agg.debtPayments), "", "30 hari terakhir")}
       </div>` : ""}
       ${walletGrid()}
-      ${payoutGaps().map(g => `<div class="ew-partial" role="status">${ICON.info}<span>${esc(g.text)}</span></div>`).join("")}
-      ${(() => { const wp = walletProgress(); return wp.partial ? `<div class="ew-partial" role="status">${ICON.info}<span><b>${wp.conn.length} dari ${wp.chosen.length} e-wallet terhubung.</b> Belum: ${wp.missing.map(channelLabel).join(", ")}. Anda tetap bisa lanjut, tapi transaksi dari e-wallet itu belum terverifikasi. Hubungkan nanti lewat Profil.</span></div>` : ""; })()}
+      ${offlineCard()}
       ${!agg.count && !Object.keys(ui.syncing).length ? `<div class="note">${ICON.info}<span><button type="button" class="link-btn inline" data-action="skipWallet">Lanjut tanpa e-wallet</button></span></div>` : ""}
       ${agg.count ? breakdown(agg) : ""}
       <div class="note">${ICON.shield}<span>Laju tidak pernah meminta PIN atau OTP. Akses hanya-baca.</span></div>
@@ -324,11 +312,29 @@
   function walletGrid() {
     const ch = S.profile.channels || [];
     const mine = WALLETS.filter(m => ch.includes(m.id));
-    const offline = ch.filter(id => !WALLETS.some(w => w.id === id)).map(channelLabel);
-    if (!mine.length) return `<div class="note accent">${ICON.info}<span>Belum ada e-wallet yang dicentang di Profil. <button type="button" class="link-btn inline" data-action="gotoStep" data-id="profil">Pilih e-wallet di Profil</button></span></div>`;
-    return `<p class="hint">Dari pilihan Anda di Profil. <button type="button" class="link-btn inline" data-action="gotoStep" data-id="profil">Ubah</button></p>
-      <div class="wallet-grid">${mine.map(walletCard).join("")}</div>
-      ${offline.length ? `<div class="note">${ICON.info}<span>${esc(offline.join(", "))} tidak bisa dihubungkan.</span></div>` : ""}`;
+    if (!mine.length) return `<div class="note accent">${ICON.info}<span>Belum ada e-wallet yang dicentang di Profil. <button type="button" class="link-btn inline" data-action="gotoUang">Pilih e-wallet di Profil</button></span></div>`;
+    return `<p class="hint">Dari pilihan Anda di Profil. <button type="button" class="link-btn inline" data-action="gotoUang">Ubah</button></p>
+      <div class="wallet-grid">${mine.map(walletCard).join("")}</div>`;
+  }
+
+  // Semua jalur uang yang tidak bisa dihubungkan (dompet Lainnya, tunai) dikumpulkan di satu kartu,
+  // plus aplikasi yang pencairannya tidak terlihat di e-wallet mana pun.
+  function offlineCard() {
+    const p = S.profile, ch = p.channels || [];
+    const rows = ch.filter(id => !WALLETS.some(w => w.id === id)).map(id => {
+      const name = id.startsWith("c:") ? id.slice(2) : null, pay = name && p.payoutTo?.[name];
+      const sub = !name ? "Dicatat manual di Pendapatan dan Pengeluaran."
+        : pay === "ya" ? "Pencairan masuk ke sini. Isi pendapatannya manual."
+        : pay === "tidak" ? "Untuk belanja. Dicatat manual."
+        : "Belum didukung penyedia. Dicatat manual.";
+      return `<li><b>${esc(channelLabel(id))}</b><small>${sub}</small></li>`;
+    });
+    const gaps = payoutGaps().filter(g => !g.wallet).map(g => (isCustom(g.platform) ? g.platform.slice(2) : platformName(g.platform)));
+    if (!rows.length && !gaps.length) return "";
+    return card("Tidak bisa dihubungkan", "", `
+      ${rows.length ? `<ul class="offline-list">${rows.join("")}</ul>` : ""}
+      ${gaps.length ? `<p class="hint">Pencairan ${esc(gaps.join(", "))} belum terlihat di e-wallet yang terhubung.</p>` : ""}
+      <p class="hint"><button type="button" class="link-btn inline" data-action="gotoUang">Ubah di Profil</button></p>`, "offline-card");
   }
 
   const walletLogo = (m) => `<span class="wallet-logo img" aria-hidden="true"><img src="${m.logo}" alt="" width="56" height="24" decoding="async"></span>`;
@@ -393,22 +399,68 @@
       <p class="hint">Menampilkan ${Math.min(15, items.length)} transaksi terbaru. Top up dan tarik saldo antar akun Anda sendiri tidak dihitung sebagai pendapatan atau pengeluaran.</p>`;
   }
 
+  // Kalender 30 hari: tiap tanggal menampilkan uang masuk, arahkan kursor untuk sisa bersih,
+  // ketuk untuk rincian hari itu. Ketuk lagi untuk kembali ke total 30 hari.
+  const sum = (o) => Object.values(o).reduce((t, v) => t + v, 0);
+  const kShort = (n) => (n >= 1e6 ? `${(n / 1e6).toLocaleString("id-ID", { maximumFractionDigits: 1 })}jt` : `${Math.round(n / 1e3)}rb`);
+  const dayName = (iso) => { const d = parseIso(iso); return `${DAYNAMES[d.getDay()]}, ${d.getDate()} ${MONTHS[d.getMonth()]} ${d.getFullYear()}`; };
+  const sign = (n) => (n > 0 ? "+" : "") + rp(n);
+  const srcLabel = (k) => (k === "lain" ? "Uang masuk lain" : k === "aplikasi" ? "Pencairan aplikasi" : platformName(k));
+  const outLabel = (k) => (k === "utang" ? "Cicilan & utang" : categoryLabel(k));
+
   function breakdown(agg) {
-    const maxP = Math.max(1, ...Object.values(agg.byPlatform));
-    const cats = Object.entries(agg.byCategory).sort((a, b) => b[1] - a[1]).slice(0, 6);
-    const maxC = Math.max(1, ...cats.map(c => c[1]));
-    const maxD = Math.max(1, ...agg.daily);
+    const dates = Object.keys(agg.days).sort();
+    if (!dates.length) return "";
+    if (ui.calDay && !agg.days[ui.calDay]) ui.calDay = null;
+    const first = parseIso(dates[0]), last = parseIso(dates[dates.length - 1]);
+    const lead = (first.getDay() + 6) % 7, tail = (7 - ((last.getDay() + 6) % 7) - 1);   // minggu dimulai Senin
+    const maxIn = Math.max(1, ...dates.map(d => sum(agg.days[d].inc)));
+    const focus = ui.calDay || dates[dates.length - 1];
+    const cells = [...Array(lead).fill('<span class="mc-pad"></span>'), ...dates.map(iso => {
+      const day = agg.days[iso], inc = sum(day.inc), out = sum(day.out), net = inc - out;
+      const dn = parseIso(iso).getDate();
+      const lvl = inc ? Math.min(4, 1 + Math.floor((inc / maxIn) * 4)) : 0;
+      const tip = agg.partialDays ? `Masuk ${rp(inc)}` : `Bersih ${sign(net)}`;
+      return `<button type="button" class="mc-day l${lvl} ${net < 0 && !agg.partialDays ? "neg" : ""}" data-action="calDay" data-id="${iso}" data-cday="${iso}" data-tip="${tip}"
+        aria-pressed="${ui.calDay === iso}" tabindex="${iso === focus ? 0 : -1}" aria-label="${dayName(iso)}. Masuk ${rp(inc)}${agg.partialDays ? "" : `, keluar ${rp(out)}, bersih ${sign(net)}`}">
+        <b>${dn}${dn === 1 || iso === dates[0] ? `<small>${MONTHS[parseIso(iso).getMonth()].slice(0, 3)}</small>` : ""}</b><span>${inc ? kShort(inc) : "-"}</span></button>`;
+    }), ...Array(tail).fill('<span class="mc-pad"></span>')].join("");
+
+    // rincian: satu hari yang dipilih, atau gabungan 30 hari
+    const pick = ui.calDay ? [ui.calDay] : dates;
+    const inc = {}, out = {};
+    pick.forEach(d => {
+      for (const [k, v] of Object.entries(agg.days[d].inc)) inc[k] = (inc[k] || 0) + v;
+      for (const [k, v] of Object.entries(agg.days[d].out)) out[k] = (out[k] || 0) + v;
+    });
+    const tIn = sum(inc), tOut = sum(out);
     const row = (label, v, max, peach) => `<div class="hrow"><span>${esc(label)}</span><span class="num">${rp(v)}</span><div class="bar ${peach ? "peach" : ""}"><i data-w="${Math.round((v / max) * 100)}"></i></div></div>`;
+    const list = (o, lbl, peach) => { const e = Object.entries(o).sort((a, b) => b[1] - a[1]), m = Math.max(1, ...e.map(x => x[1])); return e.map(([k, v]) => row(lbl(k), v, m, peach)).join(""); };
+
     return card("Rincian dari transaksi terverifikasi", `Gabungan ${agg.count} e-wallet · ${agg.txCount} transaksi · 30 hari terakhir`, `
-      <div class="field"><span class="lbl">Pencairan harian dari aplikasi</span>
-        <div class="spark" role="img" aria-label="Grafik pencairan harian 30 hari: ${agg.activeDays} hari ada pencairan, tertinggi ${rp(maxD)}">${agg.daily.map(v => `<i class="${v ? "" : "zero"}" style="height:${v ? Math.max(6, (v / maxD) * 100) : 4}%"></i>`).join("")}</div>
-        <div class="range-ends"><span>30 hari lalu</span><span>Hari ini</span></div>
+      <div class="mcal" role="group" aria-label="Kalender uang masuk 30 hari">
+        ${["Sen", "Sel", "Rab", "Kam", "Jum", "Sab", "Min"].map(d => `<span class="mc-dow" aria-hidden="true">${d}</span>`).join("")}
+        ${cells}
       </div>
-      <div class="grid2">
-        <div class="field"><span class="lbl">Pendapatan per aplikasi</span>${Object.entries(agg.byPlatform).map(([k, v]) => row(platformName(k), v, maxP)).join("") || '<p class="hint">Belum ada pencairan aplikasi.</p>'}</div>
-        <div class="field"><span class="lbl">Pengeluaran terbesar</span>${cats.map(([k, v]) => row(categoryLabel(k), v, maxC, true)).join("") || '<p class="hint">Belum ada pengeluaran.</p>'}</div>
+      <p class="hint mc-legend"><span><i class="mc-key l1"></i><i class="mc-key l4"></i> makin gelap, makin besar uang masuk</span>${agg.partialDays ? "" : '<span><i class="mc-key neg"></i> keluar lebih besar dari masuk</span>'}</p>
+      <div class="mc-detail" aria-live="polite">
+        <div class="mc-head"><b>${ui.calDay ? esc(dayName(ui.calDay)) : "Total 30 hari"}</b>${ui.calDay ? `<button type="button" class="link-btn" data-action="calDay" data-id="${ui.calDay}">Lihat 30 hari</button>` : '<span class="hint">Ketuk tanggal untuk rincian harian.</span>'}</div>
+        <div class="mc-block">
+          <div class="mc-total"><span>Penghasilan</span><b class="num">${rp(tIn)}</b></div>
+          ${list(inc, srcLabel) || '<p class="hint">Tidak ada uang masuk.</p>'}
+        </div>
+        ${agg.partialDays ? (() => {
+          const old = S.wallets.filter(w => w.summary && !w.summary.dailyOut), names = (l) => l.map(w => channelLabel(w.walletId)).join(", ");
+          const live = old.filter(w => !w.stale), gone = old.filter(w => w.stale);
+          return `<div class="ew-partial" role="status">${ICON.info}<span>Pengeluaran per hari belum ada. Data ${esc(names(old))} dari sinkron lama.${gone.length ? ` Hubungkan lagi ${esc(names(gone))} di atas.` : ""}${live.length ? ' <button type="button" class="link-btn inline" data-action="resyncAll">Sinkron ulang sekarang</button>' : ""}</span></div>`;
+        })()
+          : `<div class="mc-block">
+          <div class="mc-total"><span>Pengeluaran</span><b class="num">${rp(-tOut)}</b></div>
+          ${list(out, outLabel, true) || '<p class="hint">Tidak ada pengeluaran.</p>'}
+        </div>
+        <div class="mc-net ${tIn - tOut < 0 ? "neg" : "pos"}"><span>Sisa bersih<small>Penghasilan dikurangi pengeluaran</small></span><b class="num">${sign(tIn - tOut)}</b></div>`}
       </div>
-      <p class="hint">${Math.round(agg.categorizedRatio * 100)}% pengeluaran dikenali otomatis.</p>`);
+      <p class="hint">${Math.round(agg.categorizedRatio * 100)}% pengeluaran dikenali otomatis. Pindah saldo antar akun sendiri tidak dihitung.</p>`);
   }
 
   // Kotak verifikasi untuk satu item (diperbarui langsung saat isian berubah lewat data-calc="vf-<key>")
@@ -436,7 +488,7 @@
       ${card("Pendapatan di luar ojol", "Warung, jualan online, gaji pasangan.",
         `${sideJobsList().length ? `<p class="hint">Dari profil: ${sideJobsList().map(esc).join(", ")}</p>` : ""}${field("other", "Total pemasukan lain per bulan", money("income.other", "other"), "Kosongkan kalau tidak ada.")}
          ${vfBox(c, "inc:other")}`)}
-      ${card("Pendapatan harian seminggu terakhir", "Total semua aplikasi, termasuk tunai.", `
+      ${card("Pendapatan harian sebulan terakhir", "Total semua aplikasi, termasuk tunai.", `
         ${c.verified && daysW.length >= 5 ? `<div class="note">${ICON.badge}<span>E-wallet per hari: rata-rata ${rpShort(daysW.reduce((s, v) => s + v, 0) / daysW.length)}, ramai ${rpShort(Math.max(...daysW))}, sepi ${rpShort(Math.min(...daysW))}. Belum termasuk tunai.</span></div>` : ""}
         <div class="grid3">
           ${field("weekAvg", "Rata-rata per hari", money("income.weekAvg", "weekAvg", "185.000"), sumDaily ? `Isian per aplikasi: ${rp(sumDaily)}/hari. <button type="button" class="link-btn inline" data-action="useSum">Samakan</button>` : "")}
@@ -633,7 +685,7 @@
     $("#progressBar").style.width = progress + "%";
     $(".progress").setAttribute("aria-valuenow", progress);
     $("#pills").innerHTML = STEPS.map((s, i) => {
-      const locked = i === EW && !S.consent.useWallet && S.maxStep >= IZIN;
+      const locked = i === EW && S.consent.useWallet === false && S.maxStep >= IZIN;   // null = belum menjawab
       const ahead = !locked && i > S.step && i <= S.maxStep && isActive(i);   // sudah pernah diisi, tapi maju harus lewat Lanjut
       const disabled = !locked && !ahead && (i > S.step || !isActive(i));
       const wp = i === EW && !locked ? walletProgress() : null;
@@ -805,18 +857,6 @@
       clearOverridesFor(d.multi);
       if (d.multi === "resilience.goals" && !arr.includes(S.resilience.primaryGoal)) S.resilience.primaryGoal = arr.length === 1 ? arr[0] : "";
     } else if (d.switch) {
-      if (d.switch === "consent.useWallet" && S.consent.useWallet && S.wallets.length) {
-        const names = S.wallets.map(w => walletMeta(w.walletId)?.label).join(", ");
-        confirmBox({ title: "Batal memakai e-wallet?", body: `${esc(names)} yang sudah terhubung akan diputus, dan data transaksinya dihapus dari Laju.`, ok: "Ya, putuskan", danger: true })
-          .then(ok => {
-            if (!ok) return;
-            dropAllWallets();
-            S.consent.useWallet = false;
-            save(); render(true);
-            stepEl.querySelector('[data-switch="consent.useWallet"]')?.focus({ preventScroll: true });
-          });
-        return;
-      }
       set(d.switch, !get(d.switch));
       clearOverridesFor(d.switch);
     } else if (d.inc) {
@@ -838,6 +878,17 @@
         $("#password")?.focus(); break;
       }
       case "enableWallet": S.consent.useWallet = true; save(); render(true); break;
+      case "walletChoice": {
+        const focus = () => stepEl.querySelector(`[data-action="walletChoice"][data-id="${id}"]`)?.focus({ preventScroll: true });
+        if (id === "tidak" && S.wallets.length) {
+          const names = S.wallets.map(w => walletMeta(w.walletId)?.label).join(", ");
+          confirmBox({ title: "Batal memakai e-wallet?", body: `${esc(names)} yang sudah terhubung akan diputus, dan data transaksinya dihapus dari Laju.`, ok: "Ya, putuskan", danger: true })
+            .then(ok => { if (!ok) return; dropAllWallets(); S.consent.useWallet = false; save(); render(true); focus(); });
+          break;
+        }
+        S.consent.useWallet = id === "ya"; save(); render(true); focus(); break;
+      }
+      case "resyncAll": S.wallets.filter(w => w.summary && !w.stale && !w.summary.dailyOut).forEach(w => syncWallet(w.walletId)); break;
       case "connect": openConsent(id); break;
       case "sync": syncWallet(id); break;
       case "disconnect": {
@@ -861,7 +912,19 @@
       case "gotoStep":
         if (ui.edit) { endEdit(""); location.href = editUrl({ profil: "uang", pendapatan: "keuangan", pengeluaran: "keuangan" }[id] || "kerja"); break; }
         go(stepIdx(id)); break;
-      case "skipWallet": S.consent.useWallet = false; S.consent.useManual = true; save(); if (ui.edit) editNext(); else go(nextIdx(EW)); break;
+      case "gotoUang":   // tombol Ubah di tab E-wallet: langsung ke kartu "Uang & rekening" di Profil
+        if (ui.edit) { endEdit(""); location.href = editUrl("uang"); break; }
+        go(stepIdx("profil"));
+        setTimeout(() => {
+          const el = stepEl.querySelector(".part-uang"); if (!el) return;
+          const top = $(".topbar")?.getBoundingClientRect().bottom || 0;   // jangan sampai judul kartu tertutup header
+          window.scrollTo({ top: el.getBoundingClientRect().top + window.scrollY - top - 12, behavior: "instant" });
+          el.classList.add("flash");
+          setTimeout(() => el.classList.remove("flash"), 1600);
+        }, 60);
+        break;
+      case "calDay": ui.calDay = ui.calDay === id ? null : id; render(true); stepEl.querySelector(`[data-cday="${id}"]`)?.focus({ preventScroll: true }); break;
+      case "skipWallet": S.consent.useWallet = false; save(); if (ui.edit) editNext(); else go(nextIdx(EW)); break;
       case "useSum": {
         S.income.weekAvg = S.profile.platforms.reduce((s, p) => s + (Number(S.income.perPlatform[p]) || 0), 0);
         save(); render(true); break;
@@ -942,6 +1005,12 @@
     if (ev.target.matches("[data-combo-input]") && !ev.relatedTarget?.closest?.("[data-combo]")) setTimeout(() => { if (!document.activeElement?.closest?.("[data-combo]")) closeCombo(); }, 120);
   });
   stepEl.addEventListener("keydown", (ev) => {
+    if (ev.target.matches("[data-cday]")) {   // kalender rincian: panah pindah tanggal
+      const step = { ArrowLeft: -1, ArrowRight: 1, ArrowUp: -7, ArrowDown: 7 }[ev.key]; if (!step) return;
+      const all = [...stepEl.querySelectorAll("[data-cday]")], to = all[all.indexOf(ev.target) + step];
+      if (to) { ev.preventDefault(); ev.target.tabIndex = -1; to.tabIndex = 0; to.focus(); }
+      return;
+    }
     if (ev.target.matches("[data-adder]")) {
       if (ev.key === "Enter") { ev.preventDefault(); addCustom(ev.target.dataset.adder); }
       else if (ev.key === "Escape") { const k = ev.target.dataset.adder; ui.adder[k] = false; render(true); stepEl.querySelector(`[data-adder-toggle="${k}"]`)?.focus(); }
@@ -973,7 +1042,7 @@
   function hideTip() { tipEl.classList.remove("show"); }
   stepEl.addEventListener("pointerover", (e) => { const el = e.target.closest("[data-tip]"); if (el) showTip(el); });
   stepEl.addEventListener("pointerout", (e) => { if (e.target.closest("[data-tip]")) hideTip(); });
-  stepEl.addEventListener("focusin", (e) => { if (e.target.matches("[data-tip]")) showTip(e.target); });
+  stepEl.addEventListener("focusin", (e) => { if (e.target.matches("[data-tip]:focus-visible")) showTip(e.target); });   // klik tidak memunculkan tip yang menutupi kalender
   stepEl.addEventListener("focusout", (e) => { if (e.target.matches("[data-tip]")) hideTip(); });
   window.addEventListener("scroll", hideTip, { passive: true });
 
@@ -1292,6 +1361,11 @@
       ui.server = "down";
     }
     render(true);
+    // e-wallet yang disinkron sebelum ada rincian harian: sinkron ulang sekali per sesi supaya kalender punya pengeluaran per hari
+    if (ui.server === "ok" && !ss.get("laju-resync")) {
+      ss.set("laju-resync", "1");
+      S.wallets.filter(w => w.summary && !w.stale && !w.summary.dailyOut && w.walletId !== linkedId).forEach(w => syncWallet(w.walletId));
+    }
     if (link === "ok" && linkedId && ui.server === "ok") {
       toast(`${walletMeta(linkedId)?.label || "E-wallet"} terhubung`);
       syncWallet(linkedId);

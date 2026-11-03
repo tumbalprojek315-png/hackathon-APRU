@@ -151,16 +151,25 @@ def summarize(raw: list[RawTransaction], days: int, today: date | None = None) -
     by_platform: dict[str, int] = defaultdict(int)
     by_category: dict[str, int] = defaultdict(int)
     daily = [0] * days
+    daily_in: list[dict[str, int]] = [{} for _ in range(days)]    # uang masuk per hari per aplikasi, uang masuk lain = "lain"
+    daily_out: list[dict[str, int]] = [{} for _ in range(days)]   # pengeluaran per hari per kategori, cicilan = "utang"
     totals = defaultdict(int)
 
     for t in items:
         amt = t["amount"]
         totals[t["kind"]] += amt
+        i = (_parse_day(t["date"]) - start).days
         if t["kind"] == "income_platform":
             by_platform[t["platform"]] += amt
-            daily[(_parse_day(t["date"]) - start).days] += amt
+            daily[i] += amt
+            daily_in[i][t["platform"]] = daily_in[i].get(t["platform"], 0) + amt
+        elif t["kind"] in ("income_other", "transfer_in"):
+            daily_in[i]["lain"] = daily_in[i].get("lain", 0) + amt
         elif t["kind"] == "expense":
             by_category[t["category"]] += amt
+            daily_out[i][t["category"]] = daily_out[i].get(t["category"], 0) + amt
+        elif t["kind"] == "debt":
+            daily_out[i]["utang"] = daily_out[i].get("utang", 0) + amt
 
     expense_total = totals["expense"]
     recognised = expense_total - by_category.get("lainnya", 0)
@@ -182,5 +191,7 @@ def summarize(raw: list[RawTransaction], days: int, today: date | None = None) -
         "debtPayments": n(totals["debt"]),
         "activeDays": sum(1 for v in daily if v > 0),
         "dailyIncome": daily,
+        "dailyIn": daily_in,
+        "dailyOut": daily_out,
         "categorizedRatio": round(recognised / expense_total, 3) if expense_total else 1.0,
     }, items

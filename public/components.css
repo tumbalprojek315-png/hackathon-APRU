@@ -361,3 +361,49 @@ body.editing #doneBtn { display: inline-flex; color: var(--fg); font-weight: 800
 /* E-wallet baru sebagian terhubung: tetap boleh lanjut, tapi diberi tahu */
 .ew-partial { display: flex; gap: 10px; align-items: flex-start; padding: 12px 14px; border-radius: 1rem; border: 1.5px solid var(--st-warn); background: color-mix(in oklab, var(--st-warn) 12%, var(--card)); font-size: .86rem; line-height: 1.45; }
 .ew-partial .icon { width: 18px; height: 18px; flex: none; margin-top: 1px; color: var(--st-warn); }
+
+/* Langkah Izin data: daftar manfaat e-wallet */
+.check-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; font-size: .88rem; }
+.check-list li { display: flex; gap: 8px; }
+.check-list li > span:first-child { color: var(--st-good-ink, var(--ok)); font-weight: 800; }
+
+/* Tab E-wallet: jalur yang tidak bisa dihubungkan, dikumpulkan di satu kartu */
+.offline-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.offline-list li { display: grid; gap: 2px; padding: 10px 12px; border-radius: .8rem; background: var(--secondary); font-size: .88rem; }
+.offline-list small { color: var(--muted-fg); font-size: .78rem; line-height: 1.4; }
+.card.flash { animation: flash 1.6s var(--ease); }
+@keyframes flash { 0%, 40% { box-shadow: 0 0 0 3px var(--ring); } 100% { box-shadow: var(--shadow); } }
+
+/* Kalender rincian 30 hari */
+.mcal { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 4px; }
+.mc-dow { font-size: .68rem; font-weight: 700; color: var(--muted-fg); text-align: center; padding: 2px 0; }
+.mc-day { position: relative; display: grid; place-items: center; gap: 0; min-height: 46px; padding: 4px 0; border: 0; border-radius: .6rem; background: var(--secondary); color: var(--fg); font: inherit; cursor: pointer; }
+.mc-day b { font-size: .78rem; font-weight: 800; line-height: 1.1; }
+.mc-day b small { font-size: .58rem; font-weight: 700; margin-left: 2px; }
+.mc-day span { font-size: .62rem; font-weight: 600; line-height: 1.1; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.mc-day.l1 { background: color-mix(in oklab, var(--primary) 30%, var(--card)); }
+.mc-day.l2 { background: color-mix(in oklab, var(--primary) 55%, var(--card)); }
+.mc-day.l3 { background: color-mix(in oklab, var(--primary) 80%, var(--card)); }
+.mc-day.l4 { background: var(--primary); }
+.mc-day.neg::after { content: ""; position: absolute; left: 22%; right: 22%; bottom: 3px; height: 3px; border-radius: 2px; background: var(--danger); }
+.mc-day:hover { outline: 2px solid var(--fg); outline-offset: -2px; }
+.mc-day:focus-visible { outline: 3px solid var(--ring); outline-offset: 1px; }
+.mc-day[aria-pressed="true"] { background: var(--fg); color: var(--primary); }
+.mc-pad { min-height: 46px; }
+.mc-legend { display: flex; flex-wrap: wrap; gap: 4px 14px; }
+.mc-legend > span { display: inline-flex; align-items: center; gap: 4px; }
+.mc-key { display: inline-block; width: 12px; height: 12px; border-radius: 3px; vertical-align: -2px; }
+.mc-key.l1 { background: color-mix(in oklab, var(--primary) 30%, var(--card)); }
+.mc-key.l4 { background: var(--primary); }
+.mc-key.neg { height: 4px; background: var(--danger); }
+.mc-detail { display: grid; gap: 12px; padding: 14px; border-radius: 1rem; border: 1.5px solid var(--border); background: var(--card); }
+.mc-head { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 4px 10px; }
+.mc-block { display: grid; gap: 2px; }
+.mc-total { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; padding-bottom: 4px; border-bottom: 1px solid var(--border); font-weight: 800; font-size: .92rem; }
+.mc-total b { white-space: nowrap; }
+.mc-net { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 10px 12px; border-radius: .7rem; background: var(--secondary); }
+.mc-net span { display: grid; font-weight: 800; font-size: .92rem; }
+.mc-net small { font-size: .72rem; font-weight: 600; color: var(--muted-fg); }
+.mc-net b { font-size: 1.05rem; white-space: nowrap; }
+.mc-net.pos b { color: var(--ok); }
+.mc-net.neg b { color: var(--danger); }

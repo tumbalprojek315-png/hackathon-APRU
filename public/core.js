@@ -123,7 +123,7 @@
       channels: [], customChannels: [],   // lewat mana uang masuk & keluar: e-wallet, rekening bank, tunai, lainnya
       hasBank: false, hasBpjsKes: false, hasBpjsKet: false, hasInsurance: false, recordsIncome: "",
     },
-    consent: { useWallet: false, useManual: false, agreeTerms: false, agreeDataUse: false },
+    consent: { useWallet: null, useManual: true, agreeTerms: false, agreeDataUse: false },   // useWallet null = belum memilih. Isian manual selalu dipakai
     wallets: [],
     income: { perPlatform: {}, bonus: 0, tips: 0, other: 0, weekAvg: 0, best: 0, worst: 0 },
     expenses: Object.fromEntries(EXPENSE_CATEGORIES.map(c => [c.id, { on: !c.off, min: c.min, max: c.max }])),
@@ -149,6 +149,8 @@
   function migrate(s) {
     const c = s.consent;
     if ("useOpenFinance" in c) { c.useWallet = c.useOpenFinance === true; c.useManual = c.useOpenFinance === false; delete c.useOpenFinance; delete c.acknowledgeUnverified; }
+    if (!c.useManual && c.useWallet === false) c.useWallet = null;   // dulu belum memilih apa pun: sekarang pertanyaan ya/tidak e-wallet
+    c.useManual = true;
     if (s.account.city && s.account.city !== "Lainnya" && !CITIES.some(x => x.name === s.account.city)) { s.account.cityOther = s.account.city; s.account.city = "Lainnya"; }
     delete s.expenses.jajan; delete s.income.volatility; delete s.reconcileChoice; delete s.cash;
     s.overrides = {};   // angka "bulan ini" dari halaman Tangga dihapus: pendapatan & pengeluaran hanya diubah di Profil
@@ -530,7 +532,7 @@
     return { wallets: [...server.map(w => ({ ...w, stale: false })), ...lost.map(w => ({ ...w, stale: true }))], lost };
   }
   function aggregate() {
-    const a = { count: 0, incomePlatform: 0, incomeOther: 0, expenseTotal: 0, debtPayments: 0, internalIn: 0, internalOut: 0, txCount: 0, byPlatform: {}, byCategory: {}, daily: [], recognized: 0 };
+    const a = { count: 0, incomePlatform: 0, incomeOther: 0, expenseTotal: 0, debtPayments: 0, internalIn: 0, internalOut: 0, txCount: 0, byPlatform: {}, byCategory: {}, daily: [], recognized: 0, days: {}, partialDays: false };
     for (const w of S.wallets) {
       const s = w.summary; if (!s) continue;
       a.count++; a.incomePlatform += s.incomePlatform; a.incomeOther += s.incomeOther; a.expenseTotal += s.expenseTotal;
@@ -539,6 +541,15 @@
       for (const [k, v] of Object.entries(s.incomeByPlatform)) a.byPlatform[k] = (a.byPlatform[k] || 0) + v;
       for (const [k, v] of Object.entries(s.expenseByCategory)) a.byCategory[k] = (a.byCategory[k] || 0) + v;
       s.dailyIncome.forEach((v, i) => (a.daily[i] = (a.daily[i] || 0) + v));
+      // per tanggal: uang masuk per sumber, uang keluar per kategori (sinkron lama hanya punya pencairan harian)
+      if (!s.periodStart) continue;
+      const st = parseIso(s.periodStart);
+      if (!s.dailyOut) a.partialDays = true;
+      (s.dailyIn || s.dailyIncome.map(v => (v ? { aplikasi: v } : {}))).forEach((inc, i) => {
+        const day = a.days[isoOf(new Date(st.getFullYear(), st.getMonth(), st.getDate() + i))] ||= { inc: {}, out: {} };
+        for (const [k, v] of Object.entries(inc)) day.inc[k] = (day.inc[k] || 0) + v;
+        for (const [k, v] of Object.entries(s.dailyOut?.[i] || {})) day.out[k] = (day.out[k] || 0) + v;
+      });
     }
     a.activeDays = a.daily.filter(v => v > 0).length;
     a.categorizedRatio = a.expenseTotal ? a.recognized / a.expenseTotal : 1;
@@ -556,7 +567,7 @@
     return new Date(iso).toLocaleDateString("id-ID", { day: "numeric", month: "short" });
   }
 
-  // Seberapa naik-turun pendapatan, dihitung dari hari tersepi, rata-rata, dan hari teramai seminggu.
+  // Seberapa naik-turun pendapatan, dihitung dari hari tersepi, rata-rata, dan hari teramai sebulan terakhir.
   // Simpangan baku ditaksir dari rentang (max − min) ÷ d2(n), n = jumlah hari kerja per minggu.
   const D2 = { 2: 1.128, 3: 1.693, 4: 2.059, 5: 2.326, 6: 2.534, 7: 2.704 };
   function volatility() {

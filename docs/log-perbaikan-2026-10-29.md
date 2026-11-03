@@ -121,3 +121,25 @@ Dari dokumen tim "Semua Skenario Data Uang dan Rekening" (Paket 1 + 2 yang dipil
 
 Diuji: hanya manual (Tier 3), OVO saja dari OVO + DANA (Tier 2, DANA belum terhubung, pencairan Maxim), keduanya terhubung (Tier 1), dompet "JOJO" dengan pencairan (Tier 2), "gopey", status Kredit, OTP salah 3 kali, rekening bank lewat simulator, mode EN. Uji hitungan dan skor contoh tetap (25, 50, 93).
 
+
+## H. Revisi 4 Nov: langkah E-wallet
+
+| Bagian | Perubahan |
+|---|---|
+| Tombol Ubah | Langsung ke kartu "Uang & rekening" di Profil (digulir ke kartunya dan diberi sorotan sebentar). Dari mode ubah Profil, membuka bagian Uang & rekening |
+| Peringatan dihapus | "Pencairan Grab biasanya masuk ke OVO" dan kotak "1 dari 2 e-wallet terhubung" tidak tampil lagi di langkah ini. Kartu OVO sendiri sudah punya tombol Hubungkan. Penanda "E-wallet 1/2" di deretan langkah tetap ada |
+| Kartu "Tidak bisa dihubungkan" | Semua jalur yang tidak bisa dihubungkan (dompet Lainnya seperti JOJO, tunai) dikumpulkan di satu kartu, dengan jawaban apakah pencairan masuk ke sana. Aplikasi yang pencairannya tidak terlihat di e-wallet mana pun ditulis di kartu yang sama |
+| Rincian transaksi | Kalender 30 hari. Tiap tanggal menampilkan uang masuk (makin gelap makin besar, garis merah kalau keluar lebih besar dari masuk). Arahkan kursor untuk sisa bersih. Ketuk tanggal untuk rincian hari itu: uang masuk, uang keluar, sisa bersih, sumber uang masuk, lalu pengeluaran per kategori. Ketuk lagi untuk total 30 hari. Panah keyboard pindah tanggal |
+| Server | Ringkasan per dompet sekarang membawa `dailyIn` (uang masuk per hari per aplikasi) dan `dailyOut` (pengeluaran per hari per kategori, cicilan = `utang`). Dompet yang disinkron sebelum revisi ini tetap tampil, dengan pesan untuk sinkron ulang supaya pengeluaran harian terlihat |
+
+Diuji di layar 375x812, ID dan EN: GoPay terhubung lewat simulator, OVO belum, JOJO (pencairan masuk) dan tunai. Total harian cocok dengan total 30 hari. Uji hitungan dan skor contoh tetap.
+
+## I. Revisi 4 Nov (lanjutan)
+
+| Bagian | Perubahan |
+|---|---|
+| Kalender rincian | Rincian tanggal sekarang berupa hitungan: Penghasilan (per sumber) dikurangi Pengeluaran (per kategori) sama dengan Sisa bersih, angka yang sama dengan yang muncul saat kursor diarahkan ke tanggal itu. E-wallet yang disinkron sebelum ada data harian disinkron ulang otomatis sekali per sesi. Kalau datanya tidak bisa disinkron ulang (izin berakhir), kartu menyebut e-wallet mana yang perlu dihubungkan lagi |
+| Izin data | Isian manual selalu dipakai, jadi pilihan "Saya isi sendiri" dihapus. Pengguna hanya menjawab Ya atau Tidak untuk menghubungkan e-wallet, lalu mencentang persetujuan. Data lama yang belum pernah memilih apa pun kembali ke pertanyaan ini |
+| Pendapatan | Kartu "Pendapatan harian seminggu terakhir" jadi "Pendapatan harian sebulan terakhir" (rata-rata, hari paling ramai, hari paling sepi) |
+
+Diuji di layar 375x812, ID dan EN: pilih Tidak lalu Ya, persetujuan, GoPay lewat simulator, hari dengan sisa minus (Rp177.900 dikurangi Rp226.300 sama dengan −Rp48.400, cocok dengan angka saat kursor diarahkan), e-wallet dengan data lama. Uji hitungan dan skor contoh tetap (25, 50, 93).
