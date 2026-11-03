@@ -32,7 +32,7 @@ dialog.sheet { margin: auto auto 0; width: min(100%, calc(var(--phone) + 32px));
 .sheet-actions .btn { flex: 1; }
 
 /* halaman aplikasi: tab di baris kedua, tombol aksi ringkas */
-.app-top { display: grid; grid-template-columns: 1fr auto; }
+.app-top { display: flex; flex-wrap: wrap; row-gap: 6px; }   /* tombol kanan turun ke baris kedua bila tidak muat, tidak saling menimpa */
 .navtabs { grid-column: 1 / -1; order: 3; }
 .navtab { flex: 1; justify-content: center; }
 .app-actions .ghost-btn { padding: 0 8px; font-size: .75rem; }

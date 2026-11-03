@@ -29,8 +29,8 @@
   };
 
   function route() {
-    const [p, id] = location.hash.replace(/^#\/?/, "").split("/");
-    return { p: p || "dashboard", id: id || "" };
+    const [p, id, sub] = location.hash.replace(/^#\/?/, "").split("/");
+    return { p: p || "dashboard", id: id || "", sub: sub || "" };
   }
 
   // ---------- Render ----------
@@ -53,6 +53,10 @@
     else if (p === "milestone") { view.innerHTML = overview(); document.title = "Tangga milestone · Laju"; }
     else { view.innerHTML = dashboard(); document.title = "Dashboard · Laju"; }
     tuckNotes(view, location.hash || "dashboard");
+    if (route().sub === "rencana" && !keepScroll) {   // dari Dashboard: langsung ke kartu rencana di langkah itu
+      const t = view.querySelector("#plan-h, #upd-h")?.closest("section");
+      if (t) setTimeout(() => window.scrollTo({ top: t.getBoundingClientRect().top + window.scrollY - 70, behavior: "instant" }), 0);   // setelah hashchange menggulir ke atas
+    }
     if (keepScroll) window.scrollTo(0, y);
     hideTip();
   }
@@ -103,9 +107,8 @@
       </div>
       <div class="stack dash">
         ${focusCard(doneN)}
-        ${scoreCard(h)}
-        ${planSummary(x)}
         ${pillarsMini(h)}
+        ${planSummary(x)}
         ${cashCard(c)}
         ${goalSummary()}
       </div>`;
@@ -130,49 +133,39 @@
     </section>`;
   }
 
-  // 2. Skor + poin yang paling menaikkan dan menurunkan. Rincian ada di Tangga.
-  function scoreCard(h) {
-    const parts = h.pillars.flatMap(p => p.parts);
-    const up = parts.filter(p => p.pts > 0).sort((a, b) => b.pts - a.pts).slice(0, 2);
-    const down = parts.filter(p => p.pts < p.max).sort((a, b) => (b.max - b.pts) - (a.max - a.pts)).slice(0, 3);
-    const li = (p, n, cls) => `<li class="${cls}"><b class="num">${n}</b><span>${esc(p.label)}</span></li>`;
-    return `<section class="card" aria-labelledby="sc-h">
-      <div class="card-head"><h2 id="sc-h">Skor kesehatan finansial</h2></div>
-      <div class="sc-top"><span class="sc-num num" style="color:${h.grade.color}">${h.total}<small>/100</small></span>${statusPill(h.grade.id, h.grade.label)}</div>
-      <div class="sc-why">
-        ${up.length ? `<div><p class="sc-lbl">Menaikkan skor</p><ul class="sc-list">${up.map(p => li(p, `+${p.pts}`, "up")).join("")}</ul></div>` : ""}
-        ${down.length ? `<div><p class="sc-lbl">Menurunkan skor</p><ul class="sc-list">${down.map(p => li(p, `−${p.max - p.pts}`, "down")).join("")}</ul></div>` : ""}
-      </div>
-      <a class="more-link" href="#milestone/skor">Rincian skor di Tangga ›</a>
-    </section>`;
-  }
-
   // 3. Rencana uang dari isian pengguna di Tangga. Belum ada: tombol ke langkah sekarang.
   function planSummary(x) {
     const P = S.milestones.plans, days = S.profile.daysPerWeek * WEEKS, rows = [];
-    const perDay = (v) => `${rp(v)} per hari narik <small>≈ ${rpShort(v * days)}/bln</small>`;
     const st = (id) => ms.find(m => m.id === id);
-    if (P.minus && x.net < 0) rows.push(["Keluar dari minus", `Hemat ${rp(P.minus.cut)}/bln + narik ${P.minus.hours} jam/minggu lebih`, "minus"]);
+    const perDay = (v) => [`Setor ${rp(v)} setiap hari narik`, `Sekitar ${rp(Math.round(v * days / 1000) * 1000)} per bulan`];
+    if (P.minus && x.net < 0) rows.push(["Keluar dari minus", [P.minus.cut ? `Hemat pengeluaran ${rp(P.minus.cut)} per bulan` : "", P.minus.hours ? `Tambah narik ${P.minus.hours} jam per minggu` : ""].filter(Boolean), "minus"]);
     const em = ["bantalan", "darurat"].find(id => P[id] && st(id)?.status !== "done");
     if (em) rows.push(["Dana darurat", perDay(P[em].perDay), em]);
     if (P.tujuan && st("tujuan")?.status !== "done") rows.push(["Tabungan tujuan", perDay(P.tujuan.perDay), "tujuan"]);
-    if (Number(S.resilience.monthlySave) > 0) rows.push(["Menabung rutin", `${rp(Number(S.resilience.monthlySave))} per bulan`, "rutin"]);
-    if (P.lane && x.lane.active && !x.lane.done) rows.push(["Tambahan bayar utang", `${rp(P.lane.extra)} per bulan`, "utang"]);
+    if (Number(S.resilience.monthlySave) > 0) rows.push(["Menabung rutin", [`Sisihkan ${rp(Number(S.resilience.monthlySave))} per bulan`], "rutin"]);
+    if (P.lane && x.lane.active && !x.lane.done) rows.push(["Pelunasan utang", [`Bayar utang lebih ${rp(P.lane.extra)} per bulan`], "utang"]);
     const act = activeStep();
     return `<section class="card" aria-labelledby="pl-h">
       <div class="card-head"><h2 id="pl-h">Rencana uang bulan ini</h2></div>
-      ${rows.length ? `<ul class="plan-list">${rows.map(([l, v, id]) => `<li><a href="#milestone/${id}"><span>${l}</span><b class="num">${v}</b></a></li>`).join("")}</ul>`
+      ${rows.length ? `<ul class="plan-list">${rows.map(([l, lines, id]) => `<li><a href="#milestone/${id}/rencana"><b>${l}</b><ul>${lines.map(t => `<li>${t}</li>`).join("")}</ul><span class="chev" aria-hidden="true">›</span></a></li>`).join("")}</ul>`
         : `<p class="hint">Belum ada rencana. Susun rencana di langkah yang sedang Anda kerjakan.</p>
-           <div><a class="btn sm" href="#milestone/${act ? act.id : ""}">Susun rencana ›</a></div>`}
+           <div><a class="btn sm" href="#milestone/${act ? act.id : ""}/rencana">Susun rencana ›</a></div>`}
     </section>`;
   }
 
-  // 4. Empat pilar, ringkas. Rincian ada di Tangga.
+  // 2. Empat pilar kesehatan: poin dan kategorinya saja (tanpa skor total), dalam bentuk cincin.
+  //    Tangga memakai batang horizontal, jadi Dashboard sengaja memakai bentuk lain.
   function pillarsMini(h) {
-    return `<a class="card pil-mini" href="#milestone/skor" aria-label="Empat pilar kesehatan finansial. Buka rincian di Tangga">
-      <div class="card-head"><h2>Empat pilar</h2><span class="chev" aria-hidden="true">›</span></div>
-      <ul>${h.pillars.map(p => { const b = band(p.score); return `<li><span class="pm-l">${p.label}</span><span class="pm-bar"><i style="width:${Math.max(p.score, 3)}%;background:${b.color}"></i></span><b class="num">${p.pts}<small>/${p.max}</small></b></li>`; }).join("")}</ul>
-    </a>`;
+    const ring = (p, col) => { const r = 22, c = 2 * Math.PI * r, len = (Math.max(0, Math.min(p.pts / p.max, 1))) * c;
+      return `<svg class="pr-ring" viewBox="0 0 56 56" aria-hidden="true"><circle cx="28" cy="28" r="${r}" fill="none" stroke="var(--secondary)" stroke-width="7"/><circle cx="28" cy="28" r="${r}" fill="none" stroke="${col}" stroke-width="7" stroke-linecap="round" stroke-dasharray="${len} ${c}" transform="rotate(-90 28 28)"/></svg>`; };
+    return `<section class="card" aria-labelledby="pil-h">
+      <div class="card-head"><h2 id="pil-h">Kesehatan keuangan</h2><p>Empat pilar, masing-masing maksimal 25 poin.</p></div>
+      <ul class="pil-tiles">${h.pillars.map(p => { const b = band(p.score); return `<li>
+        <span class="pt-ring">${ring(p, b.color)}<b class="num">${p.pts}</b></span>
+        <span class="pt-txt"><b>${p.label}</b><small class="num">${p.pts} dari ${p.max} poin</small>${statusPill(b.id, b.label)}</span>
+      </li>`; }).join("")}</ul>
+      <a class="more-link" href="#milestone/skor">Rincian tiap pilar di Tangga ›</a>
+    </section>`;
   }
 
   // 5. Arus kas: dua batang (masuk dan keluar) lalu satu angka hasil
@@ -291,7 +284,7 @@
         <h1 class="step-title">Rincian skor ${x.h.total}/100</h1>
         <p class="step-desc">Ketuk "Rincian poin" di tiap pilar untuk melihat komponennya.</p>
       </div>
-      <div class="stack">${vizPillars(x.h)}${scoreGuide(x)}</div>`;
+      <div class="stack">${vizPillars(x.h)}</div>`;
   }
 
   function laneCard(lane) {
@@ -537,7 +530,7 @@
       if (x.net >= 0) return card("Rencana", "", `<div class="note">${ST_ICON.good}<span>Anda sudah tidak minus. Sisa ${rp(x.net)} per bulan, pembagiannya ada di bawah.</span></div>`) + allocCard(x);
       const p = cashPlan(m);
       return `<section class="card viz-card" aria-labelledby="plan-h">
-        <div class="card-head"><h2 id="plan-h">Rencana keluar dari minus</h2><p>Geser untuk mencoba.</p></div>
+        <div class="card-head"><h2 id="plan-h">Rencana uang bulan ini</h2><p>Geser untuk mencoba.</p></div>
         <div class="field"><span class="lbl">Pengeluaran terbesar Anda</span>${topExpenses(c)}</div>
         <div class="sim">
           <div class="field"><label for="sim-cut">Hemat pengeluaran: <output id="o-cut" class="num">${rp(p.cut)}</output> / bulan</label>
@@ -582,34 +575,12 @@
         ? `<p class="plan-big">Tambah <b>${rp(gap)}</b> per bulan</p><p class="hint" style="font-size:.88rem">= sekitar <b>${rp(perDay)}</b> setiap hari narik (${S.profile.daysPerWeek} hari/minggu). Setiap setoran yang Anda catat di langkah tabungan ikut dihitung.</p>`
         : `<div class="note">${ST_ICON.good}<span>Anda sudah menyisihkan ≥10% pendapatan.</span></div>`);
     }
-    if (m.tool === "credit") return scoreGuide(x);
+    if (m.tool === "credit") return trustCard();
     if (m.tool === "debtgoal") return laneCard(x.lane);
     if (m.tool === "fondasi" && !c.verified) {
       return card("Langkah berikutnya", "", `<p style="font-size:.9rem">Hubungkan e-wallet supaya data Anda berstatus <b>terverifikasi</b>. Lembaga keuangan membaca status ini.</p><div><a class="btn sm" href="${editUrl("ewallet")}">Hubungkan e-wallet</a></div>`);
     }
     return "";
-  }
-
-  // Cara menaikkan skor: komponen yang paling banyak "kehilangan poin", dengan langkah yang memperbaikinya.
-  const PART_STEP = {
-    "Sisa uang per bulan": "minus", "Dana darurat": "darurat", "Tes guncangan Rp1 juta": "bantalan", "Menabung rutin": "rutin",
-    "Porsi cicilan": "utang", "Utang bunga tinggi": "utang", "Total utang": "utang",
-    "BPJS Kesehatan": "proteksi", "BPJS Ketenagakerjaan": "proteksi", "Asuransi lain": "proteksi", "Tujuan yang jelas": "tujuan",
-  };
-  function scoreGuide(x) {
-    const h = x.h;
-    const parts = h.pillars.flatMap(p => p.parts.map(pt => ({ ...pt, pillar: p.label }))).filter(pt => pt.pts < pt.max).sort((a, b) => (b.max - b.pts) - (a.max - a.pts));
-    const need = Math.max(0, 70 - h.total);
-    return `<section class="card viz-card" aria-labelledby="sg-h">
-      <div class="card-head"><h2 id="sg-h">Cara naik ke skor 70</h2></div>
-      <div class="score-now"><span class="hero-num" style="font-size:3rem">${h.total}<small>/100</small></span>${statusPill(h.grade.id, h.grade.label)}<span class="hint">${need ? `butuh <b>+${need} poin</b> lagi` : "Skor sudah ≥ 70"}</span></div>
-      <ol class="gain-list">${parts.slice(0, 6).map(pt => {
-        const to = PART_STEP[pt.label];
-        const inner = `<span class="gain">+${pt.max - pt.pts}</span><span><b>${pt.label}</b><small>${esc(pt.value)} · ${esc(pt.tip)}</small></span>${to ? '<span class="chev" aria-hidden="true">›</span>' : ""}`;
-        return `<li>${to ? `<a href="#milestone/${to}">${inner}</a>` : `<div>${inner}</div>`}</li>`;
-      }).join("")}</ol>
-      <p class="hint">"+N" = poin maksimum yang bisa didapat dari komponen itu. Rincian semua komponen ada di halaman Rincian skor.</p>
-    </section>`;
   }
 
   // --- rencana arus kas
@@ -986,6 +957,7 @@
     identitas: svg('<rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="9" cy="11" r="2"/><path d="M6 16c.6-1.4 1.7-2 3-2s2.4.6 3 2M14 10h4M14 14h3"/>'),
     kerja: svg('<circle cx="6" cy="17" r="3"/><circle cx="18" cy="17" r="3"/><path d="M9 17h6l-3-7h4l2 3M12 10 10 6H7"/>'),
     keluarga: svg('<circle cx="8" cy="8" r="3"/><circle cx="17" cy="9" r="2.5"/><path d="M3 20c0-3 2.2-5 5-5s5 2 5 5M14 20c0-2.4 1.3-4 3-4s3 1.6 3 4"/>'),
+    tabungan: svg('<path d="M5 11a7 6 0 0 1 13-2h2v4l-2 1v3h-3v-2H9v2H6v-3.5A6 6 0 0 1 5 11Z"/><path d="M12 6V4"/><circle cx="15" cy="10" r=".8"/>'),
     uang: svg('<path d="M3 10 12 4l9 6"/><path d="M5 10v8M9.5 10v8M14.5 10v8M19 10v8M3 20h18"/>'),
     ewallet: svg('<rect x="6" y="2.5" width="12" height="19" rx="2.5"/><path d="M10 18h4M9 9.5l2 2 4-4"/>'),
     proteksi: svg('<path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10Z"/><path d="M12 8v6M9 11h6"/>'),
@@ -993,6 +965,21 @@
     utang: svg('<path d="M6 2h12v20l-3-2-3 2-3-2-3 2Z"/><path d="M9 7h6M9 11h6M9 15h3"/>'),
     tujuan: svg('<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1.5"/>'),
   };
+  // Status data untuk bank: tier, pendapatan yang diakui bank vs isian (panduan), dan alasan + cara naik tier.
+  function trustCard() {
+    const t = dataTrust(), c = calc();
+    return `<section class="card trust-card t${t.tier}" aria-labelledby="tr-h">
+      <div class="card-head"><h2 id="tr-h">Status data untuk bank</h2></div>
+      <div class="tr-top"><span class="tr-badge num">Tier ${t.tier}</span><span class="tr-txt"><b>${t.label}</b><small>${t.apply}</small></span></div>
+      ${t.live ? `<dl class="kv-list">
+          <div><dt>Pendapatan yang diakui bank</dt><dd class="num">${rp(t.bankIncome)}/bln</dd></div>
+          <div><dt>Isian Anda (untuk panduan)</dt><dd class="num">${rp(c.income)}/bln</dd></div>
+        </dl>
+        ${t.bankIncome < c.income ? `<p class="hint">Bank hanya menghitung pencairan aplikasi di dompet yang terhubung. Tunai dan transfer dari orang tetap dipakai untuk panduan, tapi tidak untuk pinjaman.</p>` : ""}` : ""}
+      ${t.reasons.length ? `<p class="sc-lbl">${t.tier === 1 ? "Yang perlu diperhatikan" : `Kenapa Tier ${t.tier}`}</p>
+        <ul class="tr-list">${t.reasons.map(r => `<li><span>${esc(r.t)}</span>${r.act ? `<a class="link-btn inline" href="${r.act.href}">${r.act.label}</a>` : ""}</li>`).join("")}</ul>` : ""}
+    </section>`;
+  }
   function profilePage() {
     const p = S.profile, r = S.resilience, c = calc(), ch = channelStatus(c.agg);
     const openDebts = S.debts.filter(debtOpen), goal = GOALS.find(g => g.id === r.primaryGoal)?.label;
@@ -1000,8 +987,10 @@
       identitas: `${S.account.fullName || "-"} · ${S.account.city ? cityLabel() : "-"}`,
       kerja: `${p.platforms.map(platformName).join(", ") || "-"} · ${p.vehicle === "mobil" ? "Mobil" : "Motor"} ${(OWNERSHIP.find(o => o.id === p.ownership)?.label || "").toLowerCase()} · ${p.hoursPerDay} jam × ${p.daysPerWeek} hari`,
       keluarga: `${statusLabel(p.status) || "-"} · ${p.dependents} tanggungan${p.sideJobs.length ? ` · ${p.sideJobs.join(", ")}` : ""}`,
+      tabungan: `Dana darurat ${rpShort(Number(r.savings) || 0)}${(GOAL_STEPS[r.primaryGoal] || GOAL_STEPS[""]).kind === "pot" && r.primaryGoal ? ` · Tujuan ${rpShort(Number(r.goalSaved) || 0)}` : ""}`,
       uang: `${(p.channels || []).map(channelLabel).join(", ") || "-"} · rekening bank ${p.hasBank ? "ada" : "belum"}`,
-      ewallet: ch.connected.length ? `Terhubung: ${ch.connected.map(channelLabel).join(", ")}` : "Belum terhubung",
+      ewallet: (() => { const w = ch.connected.length + ch.notConnected.length;
+        return !ch.connected.length ? "Belum terhubung" : ch.notConnected.length ? `${ch.connected.length}/${w} terhubung · Belum: ${ch.notConnected.map(channelLabel).join(", ")}` : `Terhubung: ${ch.connected.map(channelLabel).join(", ")}`; })(),
       proteksi: [p.hasBpjsKes && "BPJS Kesehatan", p.hasBpjsKet && "BPJS TK", p.hasInsurance && "Asuransi"].filter(Boolean).join(", ") || "Belum ada",
       keuangan: `Pendapatan ${rpShort(c.income)} · pengeluaran ${rpShort(c.expMid)} per bulan`,
       utang: openDebts.length ? `${openDebts.length} utang · sisa ${rpShort(openDebts.reduce((t, d) => t + Number(d.remaining), 0))}` : "Tidak ada utang",
@@ -1014,6 +1003,7 @@
         <p class="step-desc">Hidup berubah? Ubah di sini. Uang berpindah? Tekan <b>+ Catat</b>.</p>
       </div>
       <div class="stack">
+        ${trustCard()}
         <section class="card prof-list" aria-label="Bagian profil">${PROFILE_SECTIONS.map(sec => `<a class="prow" href="${editUrl(sec.id)}"><span class="prow-ic ic-${sec.id}" aria-hidden="true">${SECTION_ICON[sec.id]}</span><span class="prow-txt"><b>${sec.title}</b><small>${esc(sum[sec.id])}</small></span><span class="chev" aria-hidden="true">›</span></a>`).join("")}</section>
         <section class="card" aria-labelledby="awal-h">
           <div class="card-head"><h2 id="awal-h">Jawaban awal</h2><p>Titik awal rapor, tidak bisa diubah.</p></div>
@@ -1031,14 +1021,14 @@
   // ---------- + Catat: kejadian yang memindahkan uang ----------
   const catatDlg = $("#catatDlg");
   const cat = { kind: null, i: null, reason: "", direct: false };
-  const CATAT_TITLE = { setor: "Setor tabungan", "setor-tujuan": "Setor ke tujuan", ambil: "Ambil tabungan", bayar: "Bayar utang" };
+  const CATAT_TITLE = { setor: "Setor dana darurat", "setor-tujuan": "Setor tabungan tujuan", ambil: "Ambil dana darurat", bayar: "Bayar utang" };
   const openDebtRows = () => S.debts.map((d, i) => ({ d, i })).filter(o => debtOpen(o.d));
   function catatKinds() {
     const r = S.resilience, goalPot = (GOAL_STEPS[r.primaryGoal] || GOAL_STEPS[""]).kind === "pot", open = openDebtRows();
     return [
-      { k: "setor", s: `Dana darurat ${rp(Number(r.savings) || 0)}` },
-      ...(goalPot ? [{ k: "setor-tujuan", s: `Tabungan tujuan ${rp(Number(r.goalSaved) || 0)}` }] : []),
-      ...(Number(r.savings) > 0 ? [{ k: "ambil", s: "Servis, berobat, kebutuhan mendadak" }] : []),
+      { k: "setor", s: `Saldo sekarang ${rp(Number(r.savings) || 0)}` },
+      ...(goalPot ? [{ k: "setor-tujuan", s: `${GOALS.find(g => g.id === r.primaryGoal)?.label || "Tujuan utama"} · saldo ${rp(Number(r.goalSaved) || 0)}` }] : []),
+      ...(Number(r.savings) > 0 ? [{ k: "ambil", s: "Untuk servis, berobat, kebutuhan mendadak" }] : []),
       ...(open.length ? [{ k: "bayar", s: `${open.length} utang · sisa ${rpShort(open.reduce((t, o) => t + Number(o.d.remaining), 0))}` }] : []),
     ];
   }
@@ -1118,6 +1108,26 @@
     window.scrollTo({ top: 0 });
     view.focus({ preventScroll: true });
   });
+
+  // Tombol kembali (‹) di header: riwayat halaman di dalam aplikasi. Redup kalau belum ada halaman sebelumnya.
+  const NAV_KEY = "laju-nav";
+  const navStack = (() => { try { return JSON.parse(sessionStorage.getItem(NAV_KEY)) || []; } catch (e) { return []; } })();
+  let lastHash = location.hash || "#dashboard", goingBack = false;
+  const backBtn = $("#navBack");
+  const navSync = () => {
+    try { sessionStorage.setItem(NAV_KEY, JSON.stringify(navStack.slice(-50))); } catch (e) { /* abaikan */ }
+    backBtn?.setAttribute("aria-disabled", String(!navStack.length));
+  };
+  window.addEventListener("hashchange", () => {
+    const now = location.hash || "#dashboard";
+    if (!goingBack && now !== lastHash) navStack.push(lastHash);
+    goingBack = false; lastHash = now; navSync();
+  });
+  backBtn?.addEventListener("click", () => {
+    if (!navStack.length) return;
+    goingBack = true; location.hash = navStack.pop();
+  });
+  navSync();
   view.addEventListener("click", (ev) => {
     const f = ev.target.closest("[data-filter]");
     if (f) { page.filter = f.dataset.filter; render(true); view.querySelector(`[data-filter="${page.filter}"]`)?.focus(); return; }

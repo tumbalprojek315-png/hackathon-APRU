@@ -21,7 +21,7 @@ from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlencode, urlparse
 
-from openfinance import CATEGORY_LABELS, PLATFORM_LABELS, ProviderError, get_provider, summarize
+from openfinance import CATEGORY_LABELS, PLATFORM_LABELS, ProviderError, get_provider, history, summarize
 
 ROOT = Path(__file__).resolve().parent
 PUBLIC = ROOT / "public"
@@ -29,6 +29,7 @@ HOST = os.environ.get("LAJU_HOST", "127.0.0.1")
 PORT = int(os.environ.get("LAJU_PORT", "5174"))
 BASE_URL = os.environ.get("LAJU_BASE_URL", "")  # isi saat deploy, mis. https://laju.example.id
 PERIOD_DAYS = 30
+HISTORY_DAYS = 180   # riwayat yang ditarik untuk tier kepercayaan (6 bulan)
 RECENT_LIMIT = 40
 
 provider = get_provider()
@@ -235,12 +236,13 @@ class Handler(SimpleHTTPRequestHandler):
         if not rec:
             return self._error(404, "not_linked", "E-wallet ini belum terhubung atau izinnya sudah berakhir. Hubungkan lagi.", uid)
         try:
-            raw = provider.fetch_transactions(rec["account"], PERIOD_DAYS)
+            raw = provider.fetch_transactions(rec["account"], HISTORY_DAYS)
         except ProviderError as e:
             return self._error(e.status, e.code, str(e), uid)
         except NotImplementedError:
             return self._error(501, "not_implemented", "Integrasi penyedia asli belum diisi (openfinance/live.py).", uid)
         summary, items = summarize(raw, PERIOD_DAYS)
+        summary["history"] = history(raw)
         with _lock:
             rec.update(summary=summary, recent=items[:RECENT_LIMIT], synced_at=now_iso())
         return self._send(200, public_view(rec), uid=uid)

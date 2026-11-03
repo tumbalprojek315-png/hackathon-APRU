@@ -155,6 +155,32 @@ Rapor berisi:
 
 Kesimpulan otomatis ini adalah lapisan dasar yang selalu tersedia. Nantinya Claude memperdalamnya dengan data yang sama.
 
+## 6b. Status data untuk bank (tier kepercayaan)
+
+Mengikuti dokumen tim "Semua Skenario Data Uang dan Rekening". Satu aturan: **hanya uang yang terbukti dari sumbernya yang dipakai untuk pengajuan kredit.** Isian manual tetap dipakai, tapi hanya untuk panduan (skor, tangga, rencana).
+
+**Dua angka pendapatan**
+
+| Angka | Sumber | Dipakai untuk |
+|---|---|---|
+| Isian Anda (panduan) | Isian manual, dinaikkan ke angka e-wallet bila e-wallet lebih besar | Skor, tangga, rencana uang |
+| Pendapatan yang diakui bank | Median bulanan pencairan aplikasi di dompet yang terhubung (riwayat 6 bulan). Bonus hanya dihitung kalau muncul minimal 3 bulan, bobot setengah | Status data untuk bank |
+
+Transfer dari orang, top up dari akun sendiri, uang masuk yang tidak dikenali, dan isian manual tidak pernah masuk angka bank. Uang keluar yang tidak dikenali tetap dihitung sebagai pengeluaran.
+
+**Tier**
+
+| Tier | Syarat | Pengajuan |
+|---|---|---|
+| 1 Terverifikasi penuh | Riwayat 6 bulan, minimal 85% transaksi dikenali (dihitung dari jumlah uang), semua dompet yang dipilih terhubung, pencairan tiap aplikasi terlihat | Boleh ajukan |
+| 2 Terverifikasi sebagian | Riwayat 3 sampai 6 bulan, atau 60 sampai 85% dikenali, atau ada dompet yang dipilih belum terhubung, izin dompet berakhir, pencairan aplikasi tidak terlihat, atau pencairan masuk ke dompet "Lainnya" | Boleh ajukan, plafon dibatasi |
+| 3 Mandiri | Hanya isian manual, riwayat di bawah 3 bulan, atau di bawah 60% dikenali | Belum bisa lewat skor, hanya panduan |
+| 0 Tanpa data | Belum ada data sama sekali | Belum bisa |
+
+Setiap alasan tier ditampilkan ke pengguna bersama cara menaikkannya. Data yang terakhir diperbarui lebih dari 14 hari diberi label "data belum diperbarui" yang ikut terkirim ke bank. Plafon tidak ditampilkan dalam rupiah, karena angkanya masih perlu dikalibrasi.
+
+Dicakup di prototipe: kasus A1 sampai A5, B1, B2, B5, B6, C1 (dompet "Lainnya" + pencocokan salah ketik), C2 (rekening bank bisa dihubungkan), C3 (OTP salah 3 kali), C4 (izin ditolak), C5, C7, D1, D2, D4, E1 (status kendaraan Kredit tanpa cicilan), F6, G3, G4. Belum dibangun: unggah PDF mutasi, KYC, SLIK OJK, layar "Bantu kenali transaksi", pengenalan pinjol/bansos/dana talangan, dan semua kasus setelah pinjaman cair.
+
 ## 7. Sumber
 
 - Financial Health Network: FinHealth Score methodology: https://finhealthnetwork.org/score/score-methodology/

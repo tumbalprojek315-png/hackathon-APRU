@@ -357,3 +357,7 @@ body.editing .pills, body.editing .progress, body.editing #demoBtn { display: no
 
 #doneBtn { display: none; }
 body.editing #doneBtn { display: inline-flex; color: var(--fg); font-weight: 800; }
+
+/* E-wallet baru sebagian terhubung: tetap boleh lanjut, tapi diberi tahu */
+.ew-partial { display: flex; gap: 10px; align-items: flex-start; padding: 12px 14px; border-radius: 1rem; border: 1.5px solid var(--st-warn); background: color-mix(in oklab, var(--st-warn) 12%, var(--card)); font-size: .86rem; line-height: 1.45; }
+.ew-partial .icon { width: 18px; height: 18px; flex: none; margin-top: 1px; color: var(--st-warn); }

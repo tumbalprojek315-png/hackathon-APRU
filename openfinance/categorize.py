@@ -39,6 +39,8 @@ def _rx(*words: str) -> re.Pattern:
 # --- uang masuk ---
 REFUND = _rx(r"refund", r"pengembalian dana", r"cashback")
 INTERNAL_IN = _rx(r"top ?up", r"isi saldo", r"tarik dari bank")
+PERSON_IN = _rx(r"transfer dari [a-z]", r"kiriman dari")   # transfer dari orang: dikenali, tapi bukan pendapatan
+BONUS = _rx(r"bonus", r"insentif")
 PLATFORM_RULES = [
     ("gojek", _rx(r"gojek", r"go-?jek", r"godriver", r"gopay driver", r"mitra gojek")),
     ("grab", _rx(r"grab")),
@@ -86,10 +88,10 @@ def categorize(tx: RawTransaction) -> dict:
         else:
             for pid, rx in PLATFORM_RULES:
                 if rx.search(text) and PAYOUT_SIGNAL.search(text):
-                    out.update(kind="income_platform", platform=pid)
+                    out.update(kind="income_platform", platform=pid, bonus=bool(BONUS.search(text)))
                     break
             else:
-                out["kind"] = "income_other"
+                out["kind"] = "transfer_in" if PERSON_IN.search(text) else "income_other"
         return out
 
     for kind, cat, rx in OUT_RULES:
@@ -98,6 +100,39 @@ def categorize(tx: RawTransaction) -> dict:
             return out
     out.update(kind="expense", category="lainnya")
     return out
+
+
+def history(raw: list[RawTransaction], today: date | None = None, months: int = 6) -> dict:
+    """Riwayat per 30 hari (indeks 0 = 30 hari terakhir) untuk angka bank dan tier kepercayaan.
+
+    Hanya pencairan aplikasi yang dihitung sebagai pendapatan bank. Bonus dipisah. Persentase yang
+    dikenali dihitung dari jumlah uang, bukan jumlah transaksi. Transfer antar akun sendiri tidak ikut.
+    """
+    today = today or date.today()
+    plat, bonus = [0] * months, [0] * months
+    first = None
+    total = unknown = 0
+    for t in (categorize(x) for x in raw):
+        d = _parse_day(t["date"])
+        i = (today - d).days // 30
+        if i < 0 or i >= months:
+            continue
+        first = d if first is None or d < first else first
+        amt = t["amount"]
+        if t["kind"] == "income_platform":
+            (bonus if t.get("bonus") else plat)[i] += amt
+        if t["kind"] != "internal":
+            total += amt
+            if t["kind"] == "income_other" or (t["kind"] == "expense" and t["category"] == "lainnya"):
+                unknown += amt
+    covered = 0 if first is None else min(months, (today - first).days // 30 + 1)
+    return {
+        "months": covered,
+        "firstDate": first.isoformat() if first else None,
+        "monthlyPlatform": plat[:covered],
+        "monthlyBonus": bonus[:covered],
+        "classifiedShare": round(1 - unknown / total, 3) if total else 1.0,
+    }
 
 
 def _parse_day(iso: str) -> date:
@@ -138,7 +173,8 @@ def summarize(raw: list[RawTransaction], days: int, today: date | None = None) -
         "txCount": len(items),
         "incomePlatform": n(totals["income_platform"]),
         "incomeByPlatform": {k: n(v) for k, v in sorted(by_platform.items(), key=lambda kv: -kv[1])},
-        "incomeOther": n(totals["income_other"]),
+        "incomeOther": n(totals["income_other"] + totals["transfer_in"]),   # untuk mencocokkan isian "pemasukan lain"
+        "transferIn": n(totals["transfer_in"]),
         "internalIn": n(sum(t["amount"] for t in items if t["kind"] == "internal" and t["direction"] == "in")),
         "internalOut": n(sum(t["amount"] for t in items if t["kind"] == "internal" and t["direction"] == "out")),
         "expenseTotal": n(expense_total),

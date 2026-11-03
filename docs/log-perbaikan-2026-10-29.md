@@ -105,3 +105,19 @@ Diuji: Keuangan bulanan (2 langkah, kartu utang tersembunyi, Simpan + pesan), Ba
 Diuji: semua halaman aplikasi (3 data contoh, dengan dan tanpa e-wallet), semua langkah onboarding, 9 bagian Profil, dialog Catat, dan landing dalam mode EN. Pemindai teks sisa tidak menemukan teks Indonesia selain nama merek dan deskripsi transaksi dari e-wallet. Panel bawah diuji di layar 375x812 dengan bilah alamat: tepi bawah panel tepat di tepi layar. Uji hitungan dan skor contoh tidak berubah (25, 50, 93).
 
 Menambah teks baru: tulis dalam bahasa Indonesia seperti biasa, lalu tambahkan terjemahannya di `public/i18n-en.js`. Angka ditulis sebagai `{0}`, `{1}`. Teks yang belum ada di kamus tetap tampil dalam bahasa Indonesia, tidak error.
+
+## G. Revisi 3 Nov: skenario data Uang & rekening
+
+Dari dokumen tim "Semua Skenario Data Uang dan Rekening" (Paket 1 + 2 yang dipilih Dickson). Rincian aturan ada di `docs/metodologi.md` bagian 6b.
+
+| Bagian | Perubahan |
+|---|---|
+| Server dan simulator | Riwayat 6 bulan per dompet (berbeda per dompet: GoPay, OVO, rekening bank 6 bulan, ShopeePay 4, DANA 3, LinkAja 2). Ada transaksi yang tidak dikenali. Transfer dari orang dipisah dari uang masuk lain. Ringkasan per 30 hari (`history`) untuk angka bank dan tier. OTP salah 3 kali kembali ke Laju dengan pesan |
+| Angka dan tier | Pendapatan yang diakui bank terpisah dari isian panduan. Tier 0 sampai 3 dengan alasan dan cara naik. Langkah 8 memakai tier sebagai syarat |
+| Profil | Kartu "Status data untuk bank" di atas daftar bagian |
+| Uang & rekening | Rekening bank bisa dihubungkan. Dompet "Lainnya" ditanya apakah pencairan masuk ke sana. Nama yang salah ketik dikenali (misal "gopey" jadi GoPay) |
+| Langkah E-wallet | Peringatan "Pencairan Gojek biasanya masuk ke GoPay" kalau pencairan aplikasi tidak terlihat |
+| Daftar utang | Status kendaraan Kredit tanpa cicilan: pengingat dengan tombol tambah cicilan atau ubah jadi lunas |
+
+Diuji: hanya manual (Tier 3), OVO saja dari OVO + DANA (Tier 2, DANA belum terhubung, pencairan Maxim), keduanya terhubung (Tier 1), dompet "JOJO" dengan pencairan (Tier 2), "gopey", status Kredit, OTP salah 3 kali, rekening bank lewat simulator, mode EN. Uji hitungan dan skor contoh tetap (25, 50, 93).
+

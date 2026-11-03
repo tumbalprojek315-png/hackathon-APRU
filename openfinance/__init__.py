@@ -2,7 +2,7 @@
 import os
 
 from .base import LinkedAccount, LinkSession, Provider, ProviderError, RawTransaction  # noqa: F401
-from .categorize import CATEGORY_LABELS, PLATFORM_LABELS, summarize  # noqa: F401
+from .categorize import CATEGORY_LABELS, PLATFORM_LABELS, history, summarize  # noqa: F401
 
 
 def get_provider() -> Provider:

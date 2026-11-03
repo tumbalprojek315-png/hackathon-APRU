@@ -15,12 +15,15 @@ from urllib.parse import urlencode
 from .base import LinkedAccount, LinkSession, Provider, ProviderError, RawTransaction
 
 # Pola khas tiap e-wallet bagi driver: dari mana uang masuk, ke mana keluar.
+# `history` = berapa hari riwayat yang bisa ditarik penyedia untuk dompet itu. Sengaja berbeda per dompet,
+# supaya kasus riwayat pendek (Tier 2 atau 3) bisa didemokan.
 WALLET_PROFILES = {
-    "gopay": {"payout": ("gojek", "Pencairan saldo GoPay Driver", (90_000, 210_000)), "spend": 1.0},
-    "ovo": {"payout": ("grab", "Grab Driver - Penarikan penghasilan", (60_000, 170_000)), "spend": 0.6},
-    "dana": {"payout": ("maxim", "Maxim - Transfer pendapatan mitra", (40_000, 120_000)), "spend": 0.5},
-    "shopeepay": {"payout": ("lainnya", "ShopeeFood Driver - Pencairan komisi", (30_000, 90_000)), "spend": 0.5},
-    "linkaja": {"payout": None, "spend": 0.3},
+    "gopay": {"payout": ("gojek", "Pencairan saldo GoPay Driver", (90_000, 210_000)), "spend": 1.0, "history": 180, "unknown": 0.1},
+    "ovo": {"payout": ("grab", "Grab Driver - Penarikan penghasilan", (60_000, 170_000)), "spend": 0.6, "history": 180, "unknown": 0.2},
+    "dana": {"payout": ("maxim", "Maxim - Transfer pendapatan mitra", (40_000, 120_000)), "spend": 0.5, "history": 75, "unknown": 0.25},
+    "shopeepay": {"payout": ("lainnya", "ShopeeFood Driver - Pencairan komisi", (30_000, 90_000)), "spend": 0.5, "history": 120, "unknown": 0.15},
+    "linkaja": {"payout": None, "spend": 0.3, "history": 45, "unknown": 0.9},
+    "bank": {"payout": ("grab", "Grab Driver - Penarikan penghasilan ke rekening", (60_000, 160_000)), "spend": 0.4, "history": 180, "unknown": 0.15},
 }
 
 SPEND_TEMPLATES = [
@@ -70,6 +73,8 @@ class MockProvider(Provider):
             sess = self._sessions.pop(session_id, None)
         if not sess:
             raise ProviderError("Sesi penghubungan sudah kedaluwarsa. Coba hubungkan lagi.", "session_expired", 400)
+        if params.get("error") == "otp_failed":
+            raise ProviderError("Kode OTP salah 3 kali di halaman penyedia.", "otp_failed", 400)
         if params.get("error"):
             raise ProviderError("Izin dibatalkan di halaman penyedia.", "access_denied", 400)
         if params.get("code") != sess["code"]:
@@ -101,7 +106,7 @@ class MockProvider(Provider):
                 description=desc,
             ))
 
-        for i in range(days):
+        for i in range(min(days, prof["history"])):
             day = today - timedelta(days=i)
             working = day.weekday() != off_weekday and rnd.random() > 0.06   # sesekali sakit / libur
             if prof["payout"] and working:
@@ -119,6 +124,11 @@ class MockProvider(Provider):
             for desc, (lo, hi), dom in MONTHLY_BILLS:
                 if day.day == dom and rnd.random() < prof["spend"]:
                     add(day, rnd.uniform(lo, hi), "out", desc)
+            # transaksi yang tidak dikenali (QRIS tanpa nama jelas, dana masuk tanpa keterangan)
+            if rnd.random() < prof["unknown"]:
+                add(day, rnd.uniform(20_000, 150_000), "out", f"Pembayaran QRIS NMID ID{rnd.randrange(10**9, 10**10)}")
+            if rnd.random() < 0.01:
+                add(day, rnd.uniform(100_000, 500_000), "in", f"Dana masuk REF{rnd.randrange(10**6, 10**7)}")
             if prof["payout"] and i % 7 == 3 and rnd.random() < 0.5:
                 add(day, rnd.uniform(200_000, 500_000), "out", "Tarik saldo ke rekening BRI")
 

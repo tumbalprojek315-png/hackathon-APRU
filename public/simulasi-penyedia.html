@@ -39,7 +39,7 @@
       <div>
         <p class="muted">Yang dibagikan ke Laju:</p>
         <ul>
-          <li>Riwayat transaksi 30 hari terakhir</li>
+          <li>Riwayat transaksi 6 bulan terakhir</li>
           <li>Nama pemilik akun dan nomor yang disamarkan</li>
         </ul>
       </div>
@@ -64,7 +64,7 @@
   <script>
     (() => {
       const q = new URLSearchParams(location.search);
-      const names = { gopay: "GoPay", ovo: "OVO", dana: "DANA", shopeepay: "ShopeePay", linkaja: "LinkAja" };
+      const names = { gopay: "GoPay", ovo: "OVO", dana: "DANA", shopeepay: "ShopeePay", linkaja: "LinkAja", bank: "rekening bank" };
       const wallet = names[q.get("wallet")] || "e-wallet";
       document.querySelectorAll("[data-wallet]").forEach(el => (el.textContent = wallet));
       document.getElementById("title").textContent = `Laju meminta akses hanya-baca ke akun ${wallet} Anda`;
@@ -83,7 +83,7 @@
       };
       document.querySelectorAll("[data-deny]").forEach(b => b.addEventListener("click", () => finish({ error: "access_denied" })));
 
-      let phone = "";
+      let phone = "", tries = 0;
       document.getElementById("phoneForm").addEventListener("submit", (e) => {
         e.preventDefault();
         phone = document.getElementById("phone").value.replace(/\D/g, "");
@@ -98,8 +98,15 @@
       document.getElementById("otpForm").addEventListener("submit", (e) => {
         e.preventDefault();
         const ok = document.getElementById("otp").value.trim() === "123456";
-        document.getElementById("otpErr").hidden = ok;
-        if (!ok) return;
+        const err = document.getElementById("otpErr");
+        err.hidden = ok;
+        if (!ok) {
+          // Kasus C3: boleh coba 3 kali, lalu kembali ke Laju (progres tersimpan, bisa lanjut manual)
+          tries += 1;
+          err.textContent = tries >= 3 ? "Kode OTP salah 3 kali. Anda dikembalikan ke Laju." : `Kode OTP salah. Sisa ${3 - tries} kali coba.`;
+          if (tries >= 3) setTimeout(() => finish({ error: "otp_failed" }), 1200);
+          return;
+        }
         e.submitter.disabled = true;
         e.submitter.textContent = "Memproses…";
         finish({ code: q.get("code") || "", ref: phone.slice(-4) });

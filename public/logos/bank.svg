@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 56 24" width="56" height="24" role="img" aria-label="Rekening bank">
+  <rect x="0" y="0" width="56" height="24" rx="5" fill="#1d4e89"/>
+  <g fill="none" stroke="#fff" stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round">
+    <path d="M18 9.5 28 4.5l10 5"/>
+    <path d="M20 10.5v6M25 10.5v6M31 10.5v6M36 10.5v6"/>
+    <path d="M18 19h20"/>
+  </g>
+</svg>

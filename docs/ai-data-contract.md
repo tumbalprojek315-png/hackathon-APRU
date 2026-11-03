@@ -26,6 +26,8 @@
 | `activity` | jumlah setoran/bayar utang 30 hari, 10 catatan terakhir | menilai konsistensi dan memberi apresiasi atau dorongan |
 | `history` | potret saat onboarding selesai, skor harian (30 hari) | menulis kesimpulan "awal vs sekarang" |
 
+**Tambahan: `dataTrust`.** Tier status data (0 sampai 3), labelnya, panjang riwayat dalam bulan, persentase transaksi yang dikenali, pendapatan yang diakui bank per bulan, dan daftar alasan tier. Isinya hanya angka dan nama dompet, tanpa data pribadi.
+
 ## 2. Yang TIDAK dikirim
 
 | Data | Alasan |

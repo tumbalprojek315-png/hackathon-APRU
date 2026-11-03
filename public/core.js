@@ -32,10 +32,12 @@
     { id: "dana", label: "DANA", logo: "logos/dana.svg", hint: "Maxim & transfer masuk" },
     { id: "shopeepay", label: "ShopeePay", logo: "logos/shopeepay.svg", hint: "ShopeeFood & belanja" },
     { id: "linkaja", label: "LinkAja", logo: "logos/linkaja.svg", hint: "tagihan & bayar QRIS" },
+    { id: "bank", label: "Rekening bank", logo: "logos/bank.svg", hint: "pencairan ke rekening & tagihan" },   // dihubungkan lewat penyedia yang sama (Kasus C2)
   ];
-  const SYNC_STEPS = ["Mengambil riwayat transaksi 30 hari", "Memisahkan pencairan aplikasi dari transfer biasa", "Mengelompokkan pengeluaran ke kategori"];
+  const SYNC_STEPS = ["Mengambil riwayat transaksi 6 bulan", "Memisahkan pencairan aplikasi dari transfer biasa", "Mengelompokkan pengeluaran ke kategori"];
   const LINK_ERRORS = {
-    access_denied: "Izin dibatalkan di halaman penyedia. E-wallet tidak dihubungkan.",
+    access_denied: "Anda menolak izin, tidak apa-apa. Laju hanya membaca riwayat transaksi dan tidak bisa memindahkan uang Anda. Coba lagi, atau lanjut isi manual.",
+    otp_failed: "Kode OTP salah 3 kali. Progres Anda tersimpan. Coba lagi nanti, atau lanjut isi manual dulu.",
     session_expired: "Sesi penghubungan kedaluwarsa. Silakan coba hubungkan lagi.",
     bad_code: "Verifikasi dari penyedia gagal. Silakan coba lagi.",
     not_implemented: "Integrasi penyedia asli belum dipasang di server (openfinance/live.py).",
@@ -94,6 +96,7 @@
     { id: "kerja", title: "Cara kerja", steps: [["profil", ["aplikasi", "kendaraan", "ritme"]]] },
     { id: "keluarga", title: "Keluarga", steps: [["profil", ["keluarga"]]] },
     { id: "uang", title: "Uang & rekening", steps: [["profil", ["uang"]], ["ketahanan", ["simpan"]]] },
+    { id: "tabungan", title: "Tabungan", steps: [["ketahanan", ["tabungan"]]] },
     { id: "ewallet", title: "E-wallet & izin", steps: [["izin", null], ["ewallet", null]] },
     { id: "proteksi", title: "Proteksi", steps: [["profil", ["proteksi"]]] },
     { id: "keuangan", title: "Keuangan bulanan", steps: [["pendapatan", null], ["pengeluaran", ["belanja"]]] },
@@ -446,8 +449,8 @@
   }
 
   // Jalur uang yang dipilih pengguna (Profil): e-wallet, rekening bank, tunai, atau lainnya.
-  const CHANNELS = [...WALLETS.map(w => ({ id: w.id, label: w.label, wallet: true })), { id: "bank", label: "Rekening bank" }, { id: "tunai", label: "Tunai" }];
-  const PLATFORM_WALLET = { gojek: "gopay", shopeefood: "shopeepay", spx: "shopeepay", grab: "ovo" };   // tebakan awal saja
+  const CHANNELS = [...WALLETS.map(w => ({ id: w.id, label: w.label, wallet: true })), { id: "tunai", label: "Tunai" }];
+  const PLATFORM_WALLET = { gojek: "gopay", shopeefood: "shopeepay", spx: "shopeepay", grab: "ovo", maxim: "dana" };   // tebakan awal saja
   const channelLabel = (id) => (isCustom(id) ? id.slice(2) : CHANNELS.find(c => c.id === id)?.label || id);
   function channelStatus(agg = aggregate()) {
     const chosen = S.profile.channels || [];
@@ -987,10 +990,60 @@ income: { perPlatform: { gojek: 160000, grab: 110000 }, bonus: 400000, tips: 150
     const date = new Date(); date.setDate(date.getDate() + days);
     return { workdays, days, date };
   }
-  function verifiedMonths() {
-    if (!(S.consent.useWallet && S.wallets.some(w => w.summary))) return 0;
-    const first = Math.min(...S.wallets.map(w => new Date(w.linkedAt || Date.now()).getTime()));
-    return Math.min(6, 1 + Math.floor((Date.now() - first) / (30 * 864e5)));   // riwayat 30 hari ikut terbaca saat dihubungkan
+  const verifiedMonths = () => dataTrust().months;
+
+  // ---------- Tier kepercayaan data + pendapatan yang diakui bank ----------
+  // Satu aturan (dokumen "Semua Skenario Data Uang dan Rekening"): hanya uang yang terbukti dari sumbernya
+  // yang dipakai untuk pengajuan kredit. Isian manual tetap dipakai, tapi hanya untuk panduan.
+  // Kalau ragu, hitung lebih rendah: uang masuk yang tidak dikenali tidak pernah jadi pendapatan bank.
+  const TIER = {
+    0: { label: "Tanpa data", tone: "critical", apply: "Belum bisa ajukan kredit. Isi data atau hubungkan e-wallet dulu." },
+    1: { label: "Terverifikasi penuh", tone: "good", apply: "Boleh ajukan kredit resmi." },
+    2: { label: "Terverifikasi sebagian", tone: "warn", apply: "Boleh ajukan, tapi plafon dibatasi." },
+    3: { label: "Mandiri", tone: "serious", apply: "Belum bisa ajukan lewat skor. Laju tetap jadi panduan." },
+  };
+  const medianOf = (a) => { const v = [...a].sort((x, y) => x - y), m = v.length >> 1; return !v.length ? 0 : v.length % 2 ? v[m] : (v[m - 1] + v[m]) / 2; };
+  // Aplikasi yang dipakai tapi pencairannya tidak terlihat di dompet yang terhubung (Kasus A5, B4)
+  function payoutGaps(live = S.wallets.filter(w => w.summary && !w.stale)) {
+    if (!live.length) return [];
+    return (S.profile.platforms || []).filter(p => !live.some(w => (w.summary.incomeByPlatform || {})[p] > 0)).map(p => {
+      const wid = PLATFORM_WALLET[p], hint = wid && !live.some(w => w.walletId === wid);
+      return { platform: p, wallet: hint ? wid : null,
+        text: hint ? `Pencairan ${platformName(p)} biasanya masuk ke ${channelLabel(wid)}. Hubungkan ${channelLabel(wid)} supaya pendapatan terbaca.` : `Belum ada pencairan ${platformName(p)} di dompet yang terhubung.` };
+    });
+  }
+  function dataTrust() {
+    const live = S.wallets.filter(w => w.summary && !w.stale), stale = S.wallets.filter(w => w.summary && w.stale);
+    const reasons = [], ew = editUrl("ewallet");
+    const add = (t, act = null) => reasons.push({ t, act });
+    if (!S.consent.useWallet || !live.length) {   // Kasus A2, A4, B2
+      const tier = S.finished ? 3 : 0;
+      if (stale.length) add(`Izin ${stale.map(w => channelLabel(w.walletId)).join(", ")} sudah berakhir. Hubungkan lagi untuk membuka pengajuan.`, { href: ew, label: "Hubungkan lagi" });
+      else add("Belum ada e-wallet atau rekening yang terhubung. Isian manual hanya dipakai untuk panduan.", { href: ew, label: "Hubungkan e-wallet" });
+      return { tier, ...TIER[tier], reasons, months: 0, classified: null, bankIncome: 0, live: 0 };
+    }
+    // riwayat semua dompet terhubung digabung per 30 hari (indeks 0 = 30 hari terakhir)
+    const H = live.map(w => w.summary.history || { months: 1, monthlyPlatform: [w.summary.incomePlatform || 0], monthlyBonus: [0], classifiedShare: w.summary.categorizedRatio ?? 1 });
+    const months = Math.max(...H.map(h => h.months));
+    const series = (key) => Array.from({ length: months }, (_, i) => H.reduce((t, h) => t + (h[key][i] || 0), 0));
+    const plat = series("monthlyPlatform"), bonus = series("monthlyBonus").filter(v => v > 0);
+    const weight = live.map(w => (w.summary.incomePlatform || 0) + (w.summary.expenseTotal || 0) + 1);
+    const classified = H.reduce((t, h, i) => t + h.classifiedShare * weight[i], 0) / weight.reduce((t, v) => t + v, 0);
+    // median bulanan, bukan rata-rata (Kasus D1, G3). Bonus hanya kalau muncul minimal 3 bulan, bobot setengah (Kasus D2).
+    const bankIncome = Math.round((medianOf(plat) + (bonus.length >= 3 ? 0.5 * medianOf(bonus) : 0)) / 1000) * 1000;
+    let tier = months >= 6 && classified >= 0.85 ? 1 : months < 3 || classified < 0.6 ? 3 : 2;
+    const cap2 = () => { if (tier === 1) tier = 2; };
+    const missing = channelStatus().notConnected;
+    if (missing.length) { cap2(); add(`${missing.map(channelLabel).join(", ")} belum terhubung.`, { href: ew, label: "Hubungkan" }); }   // Kasus G4, B6
+    stale.forEach(w => { cap2(); add(`Izin ${channelLabel(w.walletId)} berakhir. Data terakhirnya masih dipakai.`, { href: ew, label: "Hubungkan lagi" }); });
+    payoutGaps(live).forEach(g => { cap2(); add(g.text, g.wallet ? { href: ew, label: `Hubungkan ${channelLabel(g.wallet)}` } : null); });
+    const unsupported = Object.entries(S.profile.payoutTo || {}).filter(([n, v]) => v === "ya" && (S.profile.channels || []).includes("c:" + n)).map(([n]) => n);
+    if (unsupported.length) { cap2(); add(`Pencairan juga masuk ke ${unsupported.join(", ")} yang belum bisa dihubungkan.`); }   // Kasus C1
+    if (months < 6) add(`Riwayat transaksi baru ${months} bulan. Butuh 6 bulan untuk terverifikasi penuh.`);   // Kasus C7, B1
+    if (classified < 0.85) add(`${Math.round(classified * 100)}% transaksi dikenali. Butuh minimal 85%.`);   // Kasus F6
+    const old = live.filter(w => w.syncedAt && Date.now() - new Date(w.syncedAt).getTime() > 14 * 864e5);
+    if (old.length) add(`Data ${old.map(w => channelLabel(w.walletId)).join(", ")} terakhir diperbarui ${relTime(old[0].syncedAt)}. Label "data belum diperbarui" ikut terkirim ke bank.`, { href: ew, label: "Sinkron ulang" });   // Kasus C5
+    return { tier, ...TIER[tier], reasons, months, classified, bankIncome, live: live.length };
   }
 
   // ---------- konteks bersama untuk semua tangga ----------
@@ -1113,7 +1166,7 @@ income: { perPlatform: { gojek: 160000, grab: 110000 }, bonus: 400000, tips: 150
     const goalAmt = Number(S.resilience.goalAmount) || 0;
     const prot = { kes: !!S.profile.hasBpjsKes, ket: !!S.profile.hasBpjsKet };
     const t10 = Math.round((0.1 * c.income) / 1000) * 1000;
-    const hist = verifiedMonths();
+    const trust = dataTrust();
     const steps = [
       {
         id: "fondasi", title: "Fondasi: data rapi", pillar: "Arus kas", tool: "fondasi",
@@ -1172,13 +1225,13 @@ income: { perPlatform: { gojek: 160000, grab: 110000 }, bonus: 400000, tips: 150
         caption: "Rekam jejak yang bisa dibawa ke bank untuk modal usaha.", explain: "rata-rata dari empat syarat di bawah.",
         criteria: [
           { label: "Skor kesehatan ≥ 70", met: h.total >= 70, value: `skor ${h.total}`, part: Math.min(1, h.total / 70), act: `Naikkan skor ${70 - h.total} poin` },
-          { label: "Riwayat transaksi terverifikasi 6 bulan", met: hist >= 6, value: `${hist} dari 6 bulan`, part: hist / 6, act: hist ? `Tambah ${6 - hist} bulan riwayat` : "Hubungkan e-wallet" },
+          { label: "Status data untuk bank: Tier 1 atau 2", met: trust.tier === 1 || trust.tier === 2, value: `Tier ${trust.tier}`, part: { 1: 1, 2: 1, 3: 0.3, 0: 0 }[trust.tier], act: "Hubungkan e-wallet" },
           { label: "Tidak ada utang bunga tinggi", met: !x.highDebts.length, value: x.highDebts.length ? `${x.highDebts.length} tersisa` : "", part: x.lane.checkpoints[0].base ? 1 - x.highTotal / x.lane.checkpoints[0].base : 1, act: "Lunasi utang bunga tinggi" },
           { label: "Cicilan ≤ 30% pendapatan", met: h.dsr <= 0.3, value: pct(h.dsr), part: h.dsr <= 0.3 ? 1 : Math.max(0, 1 - (h.dsr - 0.3) / 0.3), act: "Turunkan cicilan ke ≤30% pendapatan" },
         ],
-        cur: { label: "Sekarang", value: `Skor ${h.total} · riwayat ${hist} bln` }, tgt: { label: "Target", value: "Skor 70 · riwayat 6 bln" },
+        cur: { label: "Sekarang", value: `Skor ${h.total} · Tier ${trust.tier}` }, tgt: { label: "Target", value: "Skor 70 · Tier 1 atau 2" },
         bar: { kind: "fill", cur: h.total, tgt: 70, curLabel: "Skor", tgtLabel: "Skor minimal", fmt: (v) => String(Math.round(v)) },
-        short: `Skor ${h.total}/70 · ${hist}/6 bln`,
+        short: `Skor ${h.total}/70 · Tier ${trust.tier}`,
       },
     ];
     const kredit = steps[steps.length - 1];
@@ -1306,6 +1359,7 @@ income: { perPlatform: { gojek: 160000, grab: 110000 }, bonus: 400000, tips: 150
         volatility: vol.ready ? { label: vol.label, cv: Math.round(vol.cv * 100) / 100 } : null,
         updatedByUser: S.overrides.income != null,
         eWallet: { wallets: agg.count, monthlyPayouts: Math.round(agg.incomePlatform), otherTransfersIn: Math.round(agg.incomeOther), months: verifiedMonths() },
+        dataTrust: (() => { const t = dataTrust(); return { tier: t.tier, label: t.label, historyMonths: t.months, classifiedShare: t.classified, bankRecognisedIncomeMonthly: t.bankIncome, reasons: t.reasons.map(r => r.t) }; })(),
       },
       expenses: {
         monthlyUsed: Math.round(c.expMid), range: { min: Math.round(c.expMin), max: Math.round(c.expMax) }, verifiedShare: Math.round(c.shareOut * 100) / 100,
