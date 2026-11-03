@@ -543,10 +543,6 @@ body.no-fab .bottomnav { display: none; }
 .lane-btn .icon { width: 16px; height: 16px; }
 .lane-mini { background: color-mix(in oklab, var(--viz-debt) 16%, var(--card)); border: 2px solid var(--viz-debt); }
 .lane-mini .lane-txt b { color: var(--viz-debt); }
-.score-link { display: flex; align-items: center; gap: 12px; text-decoration: none; color: inherit; margin-top: 18px; }
-.score-link span:first-child { flex: 1; display: flex; flex-direction: column; }
-.score-link small { color: var(--muted-fg); font-size: .8rem; }
-.score-link .chev { font-size: 1.5rem; color: var(--muted-fg); }
 .pager .nx.locked { opacity: .55; cursor: not-allowed; }
 .pager .nx.locked .icon { width: 12px; height: 12px; vertical-align: -1px; }
 .mtrack li.locked .node { background: var(--secondary); border-style: dashed; opacity: .6; }
@@ -586,3 +582,13 @@ body.no-fab .bottomnav { display: none; }
 .tr-txt small { font-size: .82rem; color: var(--muted-fg); }
 .tr-list { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 6px; font-size: .86rem; }
 .tr-list li span { margin-right: 6px; }
+
+/* Tangga: rincian skor selalu terbuka, komponen yang belum penuh bisa diketuk */
+.score-sec { margin-top: 18px; }
+.pt.fixable { padding: 0; }
+.pt-link { display: flex; flex-direction: column; gap: 6px; width: 100%; padding: 10px 12px; border: 0; border-radius: .9rem; background: none; color: inherit; font: inherit; text-align: left; text-decoration: none; cursor: pointer; }
+.pt-link:hover { background: color-mix(in oklab, var(--fg) 6%, var(--secondary)); }
+.pt-link:focus-visible { outline: 3px solid var(--ring); outline-offset: 2px; }
+.pt-fix { display: grid; gap: 4px; padding-top: 6px; border-top: 1px dashed var(--border); font-size: .76rem; line-height: 1.45; }
+.pt-fix b { font-size: .8rem; text-decoration: underline; text-underline-offset: 3px; }
+.pt-fix b i { font-style: normal; text-decoration: none; display: inline-block; margin-left: 4px; }

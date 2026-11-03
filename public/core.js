@@ -62,7 +62,6 @@
     { id: "sosial", group: "gaya", label: "Arisan, sumbangan, hajatan", min: 100000, max: 250000 },
     { id: "hiburan", group: "gaya", label: "Hiburan & langganan", min: 0, max: 150000, off: true },
   ];
-  const EXP_MAX = 5000000, EXP_STEP = 50000;
   const DEBT_TYPES = ["Pinjol", "Paylater", "Cicilan", "Bank", "Koperasi", "Rentenir", "Keluarga / teman"];
   const HIGH_COST = ["Pinjol", "Paylater", "Rentenir"];
   const HABITS = [{ id: "never", label: "Belum pernah nabung" }, { id: "sisa", label: "Nabung kalau ada sisa" }, { id: "rutin", label: "Nabung rutin" }];
@@ -96,7 +95,7 @@
     { id: "kerja", title: "Cara kerja", steps: [["profil", ["aplikasi", "kendaraan", "ritme"]]] },
     { id: "keluarga", title: "Keluarga", steps: [["profil", ["keluarga"]]] },
     { id: "uang", title: "Uang & rekening", steps: [["profil", ["uang"]], ["ketahanan", ["simpan"]]] },
-    { id: "tabungan", title: "Tabungan", steps: [["ketahanan", ["tabungan"]]] },
+    { id: "tabungan", title: "Tabungan", steps: [["ketahanan", ["awal", "tabungan"]]] },   // kebiasaan, setoran per bulan, tes guncangan, saldo
     { id: "ewallet", title: "E-wallet & izin", steps: [["izin", null], ["ewallet", null]] },
     { id: "proteksi", title: "Proteksi", steps: [["profil", ["proteksi"]]] },
     { id: "keuangan", title: "Keuangan bulanan", steps: [["pendapatan", null], ["pengeluaran", ["belanja"]]] },
@@ -126,7 +125,7 @@
     consent: { useWallet: null, useManual: true, agreeTerms: false, agreeDataUse: false },   // useWallet null = belum memilih. Isian manual selalu dipakai
     wallets: [],
     income: { perPlatform: {}, bonus: 0, tips: 0, other: 0, weekAvg: 0, best: 0, worst: 0 },
-    expenses: Object.fromEntries(EXPENSE_CATEGORIES.map(c => [c.id, { on: !c.off, min: c.min, max: c.max }])),
+    expenses: Object.fromEntries(EXPENSE_CATEGORIES.map(c => [c.id, { on: false, min: 0, max: 0 }])),   // rentang per bulan yang diketik, kosong = tidak dihitung
     debts: [],
     customDebtTypes: [],
     // Penjelasan selisih isian vs e-wallet per item, mis. { "exp:kontrakan": "tunai", "inc:other": "bukan" }
@@ -152,6 +151,8 @@
     if (!c.useManual && c.useWallet === false) c.useWallet = null;   // dulu belum memilih apa pun: sekarang pertanyaan ya/tidak e-wallet
     c.useManual = true;
     if (s.account.city && s.account.city !== "Lainnya" && !CITIES.some(x => x.name === s.account.city)) { s.account.cityOther = s.account.city; s.account.city = "Lainnya"; }
+    // dulu ada saklar per kategori: sekarang kategori yang dimatikan = kosong, dan kategori dihitung kalau angkanya diisi
+    for (const e of Object.values(s.expenses)) { if (!e.on) e.min = e.max = 0; e.on = e.max > 0; }
     delete s.expenses.jajan; delete s.income.volatility; delete s.reconcileChoice; delete s.cash;
     s.overrides = {};   // angka "bulan ini" dari halaman Tangga dihapus: pendapatan & pengeluaran hanya diubah di Profil
     const pr = s.profile, rs = s.resilience;
@@ -444,8 +445,9 @@
       }
     } else if (key === "inc:other") S.income.other = r1k(agg.incomeOther);
     else if (key.startsWith("exp:")) {
-      const id = key.slice(4), e = S.expenses[id], v = Math.min(EXP_MAX, Math.ceil((agg.byCategory[id] || 0) / EXP_STEP) * EXP_STEP);
-      if (!e.on) { e.on = true; e.min = v; e.max = v; } else { e.min = Math.max(e.min, v); e.max = Math.max(e.max, e.min); }
+      const id = key.slice(4), e = S.expenses[id], v = Math.ceil((agg.byCategory[id] || 0) / 1000) * 1000;
+      if (!e.on) { e.min = v; e.max = v; } else { e.min = Math.max(e.min, v); e.max = Math.max(e.max, e.min); }
+      e.on = e.max > 0;
     }
     delete S.verify[key];
   }
@@ -691,30 +693,36 @@
     </section>`;
   }
 
-  function vizPillars(h) {
+  // fix(part) = { href } atau { act, kind } + label: tempat memperbaiki komponen yang belum penuh.
+  // Dengan fix, rincian poin selalu terbuka dan komponen yang belum penuh bisa diketuk (halaman Tangga).
+  function vizPillars(h, { fix = null, title = "Empat pilar kesehatan finansial" } = {}) {
+    const part = (pt) => {
+      const k = pt.pts >= pt.max ? "full" : pt.pts > 0 ? "part" : "zero";
+      const go = k !== "full" && fix ? fix(pt) : null;
+      const body = `<span class="pt-row"><span class="pt-name">${pt.label}</span><span class="pt-score num"><b>${pt.pts}</b>/${pt.max}</span></span>
+        <span class="pt-bar" aria-hidden="true"><i style="width:${(pt.pts / pt.max) * 100}%"></i></span>
+        <span class="pt-val">${esc(pt.value)}</span>
+        ${go ? `<span class="pt-fix"><span>${pt.tip}</span><b><span>${go.label}</span><i aria-hidden="true">›</i></b></span>` : ""}`;
+      if (!go) return `<li class="pt ${k}">${body}</li>`;
+      return `<li class="pt ${k} fixable">${go.href ? `<a class="pt-link" href="${go.href}">${body}</a>` : `<button type="button" class="pt-link" data-act="${go.act}"${go.kind ? ` data-kind="${go.kind}"` : ""}>${body}</button>`}</li>`;
+    };
     return `<section class="card viz-card" aria-labelledby="pil-h">
-      <div class="card-head"><h2 id="pil-h">Empat pilar kesehatan finansial</h2><p>Tiap pilar maksimal 25 poin.</p></div>
+      <div class="card-head"><h2 id="pil-h">${title}</h2><p>${fix ? "Tiap pilar maksimal 25 poin. Ketuk bagian yang belum penuh untuk memperbaikinya." : "Tiap pilar maksimal 25 poin."}</p></div>
       <div class="hbars">${h.pillars.map(p => {
         const b = band(p.score);
+        const list = `<ul class="pt-list">${p.parts.map(part).join("")}</ul>`;
+        const done = p.pts >= p.max ? `<p class="pt-tip">${ST_ICON.good}<span>Semua poin pilar ini sudah terkumpul.</span></p>` : "";
         return `<div>
           <div class="hb-head"><span>${p.label}</span><span class="val"><b>${p.pts}<small class="of">/${p.max}</small></b>${statusPill(b.id, b.label)}</span></div>
           <div class="hb-track"><span class="grid" style="left:25%"></span><span class="grid" style="left:50%"></span><span class="target" style="left:80%"></span>
             <span class="hb-fill" style="width:${Math.max(p.score, 1)}%;background:${b.color}" tabindex="0" data-tip="${esc(p.label)}: ${p.pts} dari ${p.max} poin (${b.label})."></span></div>
-          <details class="parts"><summary>Rincian poin <small>${p.parts.length} komponen</small></summary>
-            <ul class="pt-list">${p.parts.map(pt => {
-              const k = pt.pts >= pt.max ? "full" : pt.pts > 0 ? "part" : "zero";
-              return `<li class="pt ${k}">
-                <div class="pt-row"><span class="pt-name">${pt.label}</span><span class="pt-score num"><b>${pt.pts}</b>/${pt.max}</span></div>
-                <div class="pt-bar" aria-hidden="true"><i style="width:${(pt.pts / pt.max) * 100}%"></i></div>
-                <span class="pt-val">${esc(pt.value)}</span>
-              </li>`;
-            }).join("")}</ul>
-            <p class="pt-tip">${p.pts >= p.max ? `${ST_ICON.good}<span>Semua poin pilar ini sudah terkumpul.</span>` : `${ICON.info}<span><b>Saran:</b> ${p.tip}</span>`}</p>
-          </details>
+          ${fix ? `${list}${done}` : `<details class="parts"><summary>Rincian poin <small>${p.parts.length} komponen</small></summary>
+            ${list}${done || `<p class="pt-tip">${ICON.info}<span><b>Saran:</b> ${p.tip}</span></p>`}
+          </details>`}
         </div>`;
       }).join("")}</div>
       ${ticks([[0, "0"], [25, "25%"], [50, "50%"], [80, "80% sehat", "tgt"], [100, "100%"]])}
-      ${vizTable(["Pilar", "Poin", "Status"], h.pillars.map(p => [p.label, `${p.pts}/${p.max}`, band(p.score).label]))}
+      ${fix ? "" : vizTable(["Pilar", "Poin", "Status"], h.pillars.map(p => [p.label, `${p.pts}/${p.max}`, band(p.score).label]))}
     </section>`;
   }
 
@@ -886,7 +894,7 @@
 
   // Tiga data contoh driver, dipakai tombol "Isi contoh" dan "Data contoh".
   // Urutan: skor di bawah rata-rata → sekitar rata-rata → di atas rata-rata.
-  const demoExpenses = (o) => Object.fromEntries(EXPENSE_CATEGORIES.map(c => [c.id, o[c.id] ? { on: true, min: o[c.id][0], max: o[c.id][1] } : { on: false, min: c.min, max: c.max }]));
+  const demoExpenses = (o) => Object.fromEntries(EXPENSE_CATEGORIES.map(c => [c.id, o[c.id] ? { on: true, min: o[c.id][0], max: o[c.id][1] } : { on: false, min: 0, max: 0 }]));
   function demoState(variant = 1) {
     const nextOn = (day) => { const t = new Date(), d = new Date(t.getFullYear(), t.getMonth(), day); if (d <= t) d.setMonth(d.getMonth() + 1); return isoOf(d); };
     const consent = { useWallet: true, useManual: true, agreeTerms: true, agreeDataUse: true };
@@ -905,6 +913,7 @@ income: { perPlatform: { maxim: 90000, grab: 70000 }, bonus: 100000, tips: 50000
         profile: { platforms: ["gojek", "shopeefood"], vehicle: "motor", ownership: "kredit", hoursPerDay: 10, daysPerWeek: 6, area: "Panam & Sudirman", status: "menikah", dependents: 3, sideJobs: ["Warung"], hasBank: true, hasBpjsKes: true, hasBpjsKet: false, hasInsurance: false, channels: ["gopay", "shopeepay", "bank", "tunai"], recordsIncome: "kadang" },
         consent,
 income: { perPlatform: { gojek: 135000, shopeefood: 50000 }, bonus: 300000, tips: 120000, other: 900000, weekAvg: 185000, best: 280000, worst: 90000 },
+        expenses: demoExpenses(Object.fromEntries(EXPENSE_CATEGORIES.filter(c => !c.off).map(c => [c.id, [c.min, c.max]]))),   // angka umum per kategori
         debts: [{ type: "Pinjol", remaining: 2400000, months: 6, rate: "4", due: nextOn(15) }, { type: "Cicilan", remaining: 9600000, months: 12, rate: "1.6", due: nextOn(5) }],
         resilience: { savings: 650000, goalSaved: 0, monthlySave: 200000, habit: "sisa", places: ["E-wallet", "Uang tunai di rumah", "Arisan"], shock: "borrow", goals: ["usaha", "lunas", "darurat"], primaryGoal: "usaha", horizon: 18, goalAmount: 5000000, wantsBankLoan: true },
       },

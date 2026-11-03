@@ -143,3 +143,24 @@ Diuji di layar 375x812, ID dan EN: GoPay terhubung lewat simulator, OVO belum, J
 | Pendapatan | Kartu "Pendapatan harian seminggu terakhir" jadi "Pendapatan harian sebulan terakhir" (rata-rata, hari paling ramai, hari paling sepi) |
 
 Diuji di layar 375x812, ID dan EN: pilih Tidak lalu Ya, persetujuan, GoPay lewat simulator, hari dengan sisa minus (Rp177.900 dikurangi Rp226.300 sama dengan −Rp48.400, cocok dengan angka saat kursor diarahkan), e-wallet dengan data lama. Uji hitungan dan skor contoh tetap (25, 50, 93).
+
+## J. Revisi 4 Nov: pengeluaran diketik
+
+| Bagian | Perubahan |
+|---|---|
+| Langkah Pengeluaran | Slider diganti dua kotak rupiah per kategori: paling sedikit dan paling banyak per bulan. Kosong berarti tidak dihitung, jadi saklar per kategori dihapus. Contoh angka umum tampil sebagai "misal: ...". Makan & minum dan Bensin wajib diisi. Paling sedikit boleh kosong (dianggap Rp0). Kalau paling banyak kosong padahal paling sedikit diisi, atau paling sedikit lebih besar dari paling banyak, Lanjut tertahan dengan pesan |
+| Data lama | Rentang tetap dipakai apa adanya. Kategori yang dulu dimatikan jadi kosong |
+| Hitungan | Tidak berubah: titik tengah rentang, dengan batas bawah dari e-wallet |
+
+Diuji di layar 375x812: data lama, mengetik dua angka (perkiraan terendah dan tertinggi ikut berubah), paling banyak kosong, angka terbalik, mode EN. Uji hitungan dan skor contoh tetap (25, 50, 93).
+
+## K. Revisi 4 Nov: rincian skor di Tangga
+
+| Bagian | Perubahan |
+|---|---|
+| Halaman Tangga | Kartu link "Rincian skor kesehatan" diganti rincian skor yang langsung tampil di bawah daftar langkah. Poin tiap pilar tidak lagi disembunyikan |
+| Komponen yang belum penuh | Bisa diketuk. Tiap komponen menampilkan saran singkat dan tujuan perbaikannya: kartu Profil yang harus diisi (Keuangan bulanan, Tabungan, Daftar utang, Proteksi, Uang & rekening, Tujuan), atau Catat untuk Kebiasaan mencatat dan Dana darurat |
+| Bagian Tabungan di Profil | Sekarang juga membuka kebiasaan menabung, setoran per bulan, dan tes guncangan, supaya komponen Tes guncangan dan Menabung rutin punya tempat untuk diubah |
+| Halaman Rincian skor | Sama: selalu terbuka dan bisa diketuk. Langkah Hasil di onboarding tidak berubah |
+
+Diuji di layar 375x812, ID dan EN, data contoh Andi: 12 komponen yang belum penuh punya tujuan yang benar, Dana darurat membuka dialog Setor dana darurat, Tabungan membuka tiga kartu yang benar. Uji hitungan dan skor contoh tetap (25, 50, 93).

@@ -272,8 +272,31 @@
         ${ms.map(row).join("")}
       </ol>
       ${x.lane.active ? laneCard(x.lane) : ""}
-      <a class="card score-link" href="#milestone/skor"><span><b>Rincian skor kesehatan</b><small>Poin tiap pilar dan cara menaikkannya</small></span><span class="chev" aria-hidden="true">›</span></a>`;
+      <div class="score-sec">${vizPillars(x.h, { fix: scoreFix, title: `Rincian skor kesehatan ${x.h.total}/100` })}</div>`;
   }
+
+  // Tempat memperbaiki tiap komponen skor: kartu Profil yang harus diisi, atau Catat untuk yang dihitung dari catatan.
+  const SCORE_FIX = {
+    "Sisa uang per bulan": ["keuangan", "Cek pendapatan & pengeluaran"],
+    "Kestabilan pendapatan": ["keuangan", "Isi hari ramai & sepi"],
+    "Kebiasaan mencatat": [{ act: "catat" }, "Catat sekarang"],
+    "Dana darurat": [{ act: "catat", kind: "setor" }, "Setor dana darurat"],
+    "Tes guncangan Rp1 juta": ["tabungan", "Ubah di Tabungan"],
+    "Menabung rutin": ["tabungan", "Ubah di Tabungan"],
+    "Porsi cicilan": ["utang", "Perbarui daftar utang"],
+    "Utang bunga tinggi": ["utang", "Perbarui daftar utang"],
+    "Total utang": ["utang", "Perbarui daftar utang"],
+    "BPJS Kesehatan": ["proteksi", "Ubah di Proteksi"],
+    "BPJS Ketenagakerjaan": ["proteksi", "Ubah di Proteksi"],
+    "Asuransi lain": ["proteksi", "Ubah di Proteksi"],
+    "Rekening bank": ["uang", "Ubah di Uang & rekening"],
+    "Tujuan yang jelas": ["tujuan", "Isi tujuan & nominal"],
+    "Simpanan di tempat aman": ["uang", "Ubah tempat menyimpan"],
+  };
+  const scoreFix = (pt) => {
+    const f = SCORE_FIX[pt.label]; if (!f) return null;
+    return typeof f[0] === "string" ? { href: editUrl(f[0]), label: f[1] } : { ...f[0], label: f[1] };
+  };
 
   // Rincian skor (dibuka dari Dashboard: skor dan empat pilar)
   function scorePage() {
@@ -282,9 +305,9 @@
       <div class="page-head">
         <p class="eyebrow">Skor kesehatan finansial</p>
         <h1 class="step-title">Rincian skor ${x.h.total}/100</h1>
-        <p class="step-desc">Ketuk "Rincian poin" di tiap pilar untuk melihat komponennya.</p>
+        <p class="step-desc">Ketuk bagian yang belum penuh untuk memperbaikinya.</p>
       </div>
-      <div class="stack">${vizPillars(x.h)}</div>`;
+      <div class="stack">${vizPillars(x.h, { fix: scoreFix })}</div>`;
   }
 
   function laneCard(lane) {

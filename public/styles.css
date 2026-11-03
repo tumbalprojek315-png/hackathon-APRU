@@ -163,7 +163,7 @@ input[type="range"]::-moz-range-thumb { width: 20px; height: 20px; border-radius
 .cat { border: 1px solid var(--border); border-radius: 1.1rem; padding: 14px 16px; display: flex; flex-direction: column; gap: 10px; background: var(--card); }
 .cat.off { background: transparent; border-style: dashed; }
 .cat.off .cat-body { display: none; }
-.cat-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.cat-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 4px 12px; }
 .cat-head b { font-size: .9rem; }
 .cat-head small { display: block; font-size: .72rem; color: var(--muted-fg); }
 .cat-body { display: grid; gap: 4px 20px; grid-template-columns: 1fr; }

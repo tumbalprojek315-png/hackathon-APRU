@@ -151,7 +151,13 @@
       }
       case "pengeluaran": {
         const bad = S.debts.find(d => !d.type || (!(Number(d.remaining) > 0) && !d.paidOff));
-        if (bad) errs.x = "Lengkapi jenis dan sisa utang, atau hapus barisnya.";
+        const empty = ["makan", "bbm"].filter(id => !S.expenses[id]?.on);
+        const half = EXPENSE_CATEGORIES.find(k => { const e = S.expenses[k.id]; return e.min > 0 && !e.max; });   // paling sedikit boleh kosong (= Rp0), paling banyak tidak
+        const flip = EXPENSE_CATEGORIES.find(k => { const e = S.expenses[k.id]; return e.max > 0 && e.min > e.max; });
+        if (empty.length) errs.x = `Isi pengeluaran ${empty.map(categoryLabel).join(" dan ")}.`;
+        else if (half) errs.x = `Isi paling sedikit dan paling banyak untuk ${half.label}.`;
+        else if (flip) errs.x = `${flip.label}: paling sedikit lebih besar dari paling banyak.`;
+        else if (bad) errs.x = "Lengkapi jenis dan sisa utang, atau hapus barisnya.";
         break;
       }
       case "ketahanan":
@@ -529,18 +535,12 @@
   R.pengeluaran = () => {
     const c = calc(), agg = c.agg;
     const catRow = (cat) => {
-      const e = S.expenses[cat.id];
-      const pa = (e.min / EXP_MAX) * 100, pb = (e.max / EXP_MAX) * 100;
-      return `<div class="cat ${e.on ? "" : "off"}">
-        <div class="cat-head"><div><b>${cat.label}</b>${e.on ? "" : "<small>Tidak dihitung</small>"}${c.verified && agg.byCategory[cat.id] ? `<span class="verified-amt num">${ICON.badge} Tercatat di e-wallet: ${rp(agg.byCategory[cat.id])}</span>` : ""}</div>${sw(`expenses.${cat.id}.on`, cat.label)}</div>
+      const e = S.expenses[cat.id], id = "exp-" + cat.id;
+      return `<div class="cat">
+        <div class="cat-head"><b>${cat.label}</b>${c.verified && agg.byCategory[cat.id] ? `<span class="verified-amt num">${ICON.badge} Tercatat di e-wallet: ${rp(agg.byCategory[cat.id])}</span>` : ""}</div>
         <div class="cat-range">
-          <div class="dual" style="--a:${pa}%;--b:${pb}%">
-            <div class="dual-track"><div class="dual-fill"></div></div>
-            <input type="range" data-thumb="min" min="0" max="${EXP_MAX}" step="${EXP_STEP}" value="${e.min}" data-bind="expenses.${cat.id}.min" data-kind="num" aria-label="${esc(cat.label)}, paling sedikit per bulan" aria-valuetext="${rp(e.min)}" style="z-index:${e.min > EXP_MAX * 0.9 ? 3 : 1}">
-            <input type="range" data-thumb="max" min="0" max="${EXP_MAX}" step="${EXP_STEP}" value="${e.max}" data-bind="expenses.${cat.id}.max" data-kind="num" aria-label="${esc(cat.label)}, paling banyak per bulan" aria-valuetext="${rp(e.max)}" style="z-index:2">
-          </div>
-          <div class="dual-ends"><span>Rp0</span><span>Rp5 juta</span></div>
-          <p class="dual-val num" data-calc="cat-${cat.id}">(${rp(e.min)} - ${rp(e.max)})</p>
+          ${field(id + "-min", "Paling sedikit", money(`expenses.${cat.id}.min`, id + "-min", fmt(cat.min)))}
+          ${field(id + "-max", "Paling banyak", money(`expenses.${cat.id}.max`, id + "-max", fmt(cat.max)))}
         </div>
         ${vfBox(c, `exp:${cat.id}`)}</div>`;
     };
@@ -555,9 +555,9 @@
         ${field(`dd-${i}`, "Tanggal jatuh tempo berikutnya", `<button type="button" class="input date-btn" id="dd-${i}" data-date="debts.${i}.due" aria-haspopup="dialog">${d.due ? `<span class="num">${fmtDate(d.due)}</span>` : '<span class="ph">Pilih tanggal</span>'}${ICON.calendar}</button>`, "Format hari/bulan/tahun.")}
       </div></div>`;
     const unknown = c.verified ? agg.byCategory.lainnya || 0 : 0;
-    return shell("Ke mana uang Anda pergi?", "Titik kiri = bulan hemat, titik kanan = bulan boros. Tunai dan non-tunai.", `
+    return shell("Ke mana uang Anda pergi?", "Ketik paling sedikit dan paling banyak per bulan, tunai dan non-tunai. Kosongkan kalau tidak ada.", `
       ${c.verified ? `<div class="note">${ICON.badge}<span>Angka e-wallet di tiap kategori dipakai untuk mengecek isian Anda.${unknown ? ` ${rpShort(unknown)} transaksi belum dikenali.` : ""}</span></div>` : ""}
-      <div class="grid3 part-belanja">${stat("Perkiraan terendah / bulan", rp(c.expMin), "", "", "expMin")}${stat("Perkiraan tertinggi / bulan", rp(c.expMax), "dark", "", "expMax")}${stat("Kategori aktif", String(c.activeCount), "", "", "activeCount")}</div>
+      <div class="grid3 part-belanja">${stat("Perkiraan terendah / bulan", rp(c.expMin), "", "", "expMin")}${stat("Perkiraan tertinggi / bulan", rp(c.expMax), "dark", "", "expMax")}${stat("Kategori diisi", String(c.activeCount), "", "", "activeCount")}</div>
       ${EXPENSE_GROUPS.map(g => card(g.label, g.caption, `<div style="display:flex;flex-direction:column;gap:10px">${EXPENSE_CATEGORIES.filter(x => x.group === g.id).map(catRow).join("")}</div>`, "part-belanja")).join("")}
       ${card("Utang & cicilan", "", `
         ${vehicleLoanPrompt(c)}
@@ -721,7 +721,6 @@
       if (k in map) el.textContent = map[k];
       else if (k === "volbox") el.innerHTML = volBox();
       else if (k === "debtLine") el.innerHTML = debtLineText(c);
-      else if (k.startsWith("cat-")) { const e = S.expenses[k.slice(4)]; el.textContent = `(${rp(e.min)} - ${rp(e.max)})`; }
       else if (k.startsWith("vf-")) el.innerHTML = verifyLine(c.items.find(i => i.key === k.slice(3)), { interactive: true });
     });
   }
@@ -787,17 +786,11 @@
     set(path, v);
     clearOverridesFor(path);
 
-    // dua titik pada satu garis: titik kiri tidak boleh melewati titik kanan
+    // pengeluaran: rentang yang diketik, kategori dihitung kalau angka paling banyak diisi
     const m = path.match(/^expenses\.(\w+)\.(min|max)$/);
     if (m) {
       const e = S.expenses[m[1]];
-      if (m[2] === "min" && e.min > e.max) { e.min = e.max; el.value = e.min; }
-      if (m[2] === "max" && e.max < e.min) { e.max = e.min; el.value = e.max; }
-      const wrap = el.closest(".dual");
-      wrap.style.setProperty("--a", (e.min / EXP_MAX) * 100 + "%");
-      wrap.style.setProperty("--b", (e.max / EXP_MAX) * 100 + "%");
-      wrap.querySelector('[data-thumb="min"]').style.zIndex = e.min > EXP_MAX * 0.9 ? 3 : 1;
-      el.setAttribute("aria-valuetext", rp(Number(el.value)));
+      e.on = e.max > 0;
     } else if (el.type === "range") el.style.setProperty("--p", ((el.value - el.min) / (el.max - el.min)) * 100 + "%");
     stepEl.querySelectorAll(`[data-out="${path}"]`).forEach(o => (o.textContent = v));
     stepEl.querySelectorAll(`[data-preview-of="${path}"]`).forEach(o => (o.innerHTML = previewText(o.dataset.previewFmt, v)));
