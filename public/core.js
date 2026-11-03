@@ -116,7 +116,7 @@
     scoreLog: [],    // skor harian, untuk rapor
     startSnap: null, // potret kondisi saat onboarding selesai (rapor "awal vs sekarang")
     overrides: {},   // angka "bulan ini" yang diperbarui dari halaman tangga (menggantikan perkiraan onboarding)
-    account: { fullName: "", phone: "", username: "", password: "", city: "", cityOther: "" },
+    account: { fullName: "", phone: "", password: "", city: "", cityOther: "" },
     profile: {
       platforms: [], customPlatforms: [], vehicle: "", ownership: "", hoursPerDay: 9, daysPerWeek: 6, area: "",
       status: "", customStatuses: [], dependents: 0, sideJobs: [], customSideJobs: [],
@@ -881,7 +881,7 @@
     const consent = { useWallet: true, useManual: true, agreeTerms: true, agreeDataUse: true };
     const demos = [
       {   // di bawah rata-rata: minus tiap bulan, utang bunga tinggi berlapis, tanpa bantalan & proteksi
-        account: { fullName: "Andi Saputra", phone: "085711223344", username: "andi.narik", password: "contoh1234", city: "Bekasi" },
+        account: { fullName: "Andi Saputra", phone: "085711223344", password: "contoh1234", city: "Bekasi" },
         profile: { platforms: ["maxim", "grab"], vehicle: "motor", ownership: "sewa", hoursPerDay: 11, daysPerWeek: 6, area: "Bekasi Timur", status: "menikah", dependents: 2, sideJobs: [], hasBank: false, hasBpjsKes: true, hasBpjsKet: false, hasInsurance: false, channels: ["ovo", "dana", "tunai"], recordsIncome: "kadang" },
         consent,
 income: { perPlatform: { maxim: 90000, grab: 70000 }, bonus: 100000, tips: 50000, other: 0, weekAvg: 160000, best: 300000, worst: 60000 },
@@ -890,7 +890,7 @@ income: { perPlatform: { maxim: 90000, grab: 70000 }, bonus: 100000, tips: 50000
         resilience: { savings: 50000, goalSaved: 0, monthlySave: 0, habit: "never", places: ["Uang tunai di rumah"], shock: "none", goals: ["lunas", "darurat"], primaryGoal: "lunas", horizon: 12, goalAmount: 6700000, wantsBankLoan: false },
       },
       {   // sekitar rata-rata
-        account: { fullName: "Sudirman Hasibuan", phone: "081234567890", username: "sudirman.ojol", password: "contoh1234", city: "Pekanbaru" },
+        account: { fullName: "Sudirman Hasibuan", phone: "081234567890", password: "contoh1234", city: "Pekanbaru" },
         profile: { platforms: ["gojek", "shopeefood"], vehicle: "motor", ownership: "kredit", hoursPerDay: 10, daysPerWeek: 6, area: "Panam & Sudirman", status: "menikah", dependents: 3, sideJobs: ["Warung"], hasBank: true, hasBpjsKes: true, hasBpjsKet: false, hasInsurance: false, channels: ["gopay", "shopeepay", "bank", "tunai"], recordsIncome: "kadang" },
         consent,
 income: { perPlatform: { gojek: 135000, shopeefood: 50000 }, bonus: 300000, tips: 120000, other: 900000, weekAvg: 185000, best: 280000, worst: 90000 },
@@ -898,7 +898,7 @@ income: { perPlatform: { gojek: 135000, shopeefood: 50000 }, bonus: 300000, tips
         resilience: { savings: 650000, goalSaved: 0, monthlySave: 200000, habit: "sisa", places: ["E-wallet", "Uang tunai di rumah", "Arisan"], shock: "borrow", goals: ["usaha", "lunas", "darurat"], primaryGoal: "usaha", horizon: 18, goalAmount: 5000000, wantsBankLoan: true },
       },
       {   // di atas rata-rata: surplus sehat, dana darurat penuh, proteksi lengkap, utang murah
-        account: { fullName: "Wayan Sudarsana", phone: "081999887766", username: "wayan.ride", password: "contoh1234", city: "Denpasar" },
+        account: { fullName: "Wayan Sudarsana", phone: "081999887766", password: "contoh1234", city: "Denpasar" },
         profile: { platforms: ["gojek", "grab"], vehicle: "motor", ownership: "lunas", hoursPerDay: 9, daysPerWeek: 6, area: "Denpasar Selatan", status: "menikah", dependents: 2, sideJobs: ["Jualan online"], hasBank: true, hasBpjsKes: true, hasBpjsKet: true, hasInsurance: false, channels: ["gopay", "ovo", "bank"], recordsIncome: "kadang" },
         consent,
 income: { perPlatform: { gojek: 160000, grab: 110000 }, bonus: 400000, tips: 150000, other: 1200000, weekAvg: 270000, best: 310000, worst: 230000 },
@@ -1327,7 +1327,7 @@ income: { perPlatform: { gojek: 160000, grab: 110000 }, bonus: 400000, tips: 150
   // =====================================================================
   // Konteks untuk analisis AI (Claude API), lihat docs/ai-data-contract.md
   // Prinsip: hanya data yang dibutuhkan untuk membimbing keuangan, TANPA data
-  // identitas (nama, nomor HP, username, password, area narik detail).
+  // identitas (nama, nomor HP, password, area narik detail).
   // =====================================================================
   function buildAIContext() {
     const ms = buildMilestones(), x = ms[0].x, c = x.c, h = x.h, p = S.profile, r = S.resilience, inc = S.income;
@@ -1396,7 +1396,7 @@ income: { perPlatform: { gojek: 160000, grab: 110000 }, bonus: 400000, tips: 150
         recent: S.ledger.filter(e => !e.undone).slice(-10).map(e => ({ at: e.at.slice(0, 10), type: e.type, label: e.label, amount: e.amount })),
       },
       history: { start: S.startSnap, scoreLog: S.scoreLog.slice(-30) },
-      excludedForPrivacy: ["nama lengkap", "nomor HP", "username", "password", "area narik detail", "token e-wallet"],
+      excludedForPrivacy: ["nama lengkap", "nomor HP", "password", "area narik detail", "token e-wallet"],
     };
   }
 

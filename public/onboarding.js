@@ -29,7 +29,6 @@
   // ---------- Opsi buatan sendiri ("+ Lainnya" → ketik → Enter → muncul opsi baru) ----------
   const ADDERS = {
     platform: { list: "profile.customPlatforms", sel: () => "profile.platforms", multi: true, toId: n => "c:" + n, builtin: n => PLATFORMS.find(x => norm(x.label) === norm(n))?.id, label: "Nama aplikasi lain", ph: "misal: Borzo", note: "Tersimpan sebagai Lainnya (nama aplikasi)." },
-    status: { list: "profile.customStatuses", sel: () => "profile.status", multi: false, toId: n => "c:" + n, builtin: n => STATUS.find(x => norm(x.label) === norm(n))?.id, label: "Status lain", ph: "misal: Cerai", note: "Tersimpan persis seperti yang Anda ketik." },
     side: { list: "profile.customSideJobs", sel: () => "profile.sideJobs", multi: true, toId: n => n, builtin: n => SIDE_JOBS.find(x => norm(x) === norm(n)), label: "Pekerjaan sampingan lain", ph: "misal: Tukang cukur", note: "Tersimpan persis seperti yang Anda ketik." },
     channel: { list: "profile.customChannels", sel: () => "profile.channels", multi: true, toId: n => "c:" + n, builtin: n => closeChannel(n), label: "Jalur lain", ph: "misal: SeaBank, Jago", note: "Tersimpan persis seperti yang Anda ketik." },
     place: { list: "resilience.customPlaces", sel: () => "resilience.places", multi: true, toId: n => n, builtin: n => SAVING_PLACES.find(x => norm(x) === norm(n)), label: "Tempat menyimpan lain", ph: "misal: Celengan", note: "Tersimpan persis seperti yang Anda ketik." },
@@ -96,7 +95,6 @@
     set(c.list, get(c.list).filter(x => x !== name));
     const id = c.toId(name);
     if (key === "platform") { S.profile.platforms = S.profile.platforms.filter(x => x !== id); delete S.income.perPlatform[id]; }
-    if (key === "status" && S.profile.status === id) S.profile.status = "";
     if (key === "side") S.profile.sideJobs = S.profile.sideJobs.filter(x => x !== id);
     if (key === "place") S.resilience.places = S.resilience.places.filter(x => x !== id);
     if (key === "channel") S.profile.channels = S.profile.channels.filter(x => x !== id);
@@ -123,7 +121,6 @@
       case "akun":
         if (a.fullName.trim().length < 2) errs.fullName = "Isi nama Anda.";
         if (a.phone.replace(/\D/g, "").length < 9) errs.phone = "Nomor HP minimal 9 digit.";
-        if (!/^[a-z0-9._]{3,}$/.test(a.username)) errs.username = "Minimal 3 karakter: huruf kecil, angka, titik, atau garis bawah.";
         if (a.password.length < 8) errs.password = "Password minimal 8 karakter.";
         if (!a.city) errs.city = "Pilih kota tempat Anda paling sering narik.";
         else if (a.city === "Lainnya" && !a.cityOther.trim()) errs.cityOther = "Ketik nama kota Anda.";
@@ -132,7 +129,6 @@
         if (!p.platforms.length) errs.x = "Pilih minimal satu aplikasi.";
         else if (!p.vehicle) errs.x = "Pilih jenis kendaraan.";
         else if (!p.ownership) errs.x = "Pilih status kepemilikan kendaraan.";
-        else if (!p.status) errs.x = "Pilih status keluarga.";
         else if (!p.channels.length) errs.x = "Pilih lewat mana saja uang Anda biasanya masuk dan keluar.";
         else if (!p.recordsIncome) errs.x = "Jawab seberapa sering Anda mencatat pendapatan.";
         break;
@@ -183,7 +179,6 @@
         <div class="grid2">
           ${field("fullName", "Nama lengkap", textInput("account.fullName", { id: "fullName", placeholder: "Nama sesuai panggilan sehari-hari", invalid: !!e.fullName, extra: 'autocomplete="name"' }), "", e.fullName)}
           ${field("phone", "Nomor HP (WhatsApp)", textInput("account.phone", { id: "phone", type: "tel", placeholder: "08xxxxxxxxxx", invalid: !!e.phone, extra: 'autocomplete="tel" inputmode="tel"' }), "", e.phone)}
-          ${field("username", "Username", textInput("account.username", { id: "username", kind: "lower", placeholder: "misal: sudirman.ojol", invalid: !!e.username, extra: 'autocomplete="username" autocapitalize="none"' }), "Huruf kecil tanpa spasi.", e.username)}
           ${ui.edit ? "" : field("password", "Password", `<div class="input-wrap">${textInput("account.password", { id: "password", type: ui.showPw ? "text" : "password", placeholder: "••••••••", invalid: !!e.password, extra: 'autocomplete="new-password"' })}<button type="button" data-action="togglePw" aria-label="${ui.showPw ? "Sembunyikan" : "Tampilkan"} password">${ui.showPw ? ICON.eyeOff : ICON.eye}</button></div>`, "Minimal 8 karakter.", e.password)}
         </div>
         <div class="combo" data-combo>
@@ -205,7 +200,7 @@
 
   R.profil = () => {
     const p = S.profile;
-    return shell("Cerita sedikit soal cara Anda narik", "Cara Anda narik menentukan pola pendapatan.",
+    return shell("Profil Anda", "Cara Anda narik menentukan pola pendapatan.",
       card("Aplikasi yang Anda pakai", "Boleh pilih lebih dari satu.", `
         <div class="optgrid">${PLATFORMS.map(x => opt("profile.platforms", x.id, x.label, "", true)).join("")}${p.customPlatforms.map(n => customOpt("platform", n, "opt")).join("")}${adderToggle("platform", "opt")}</div>
         ${adderRow("platform")}`, "part-aplikasi") +
@@ -219,8 +214,6 @@
         </div>
         ${field("area", "Area utama narik", textInput("profile.area", { id: "area", placeholder: "misal: Panam, Sudirman, Bandara SSK II" }), "Opsional.")}`, "part-ritme") +
       card("Keluarga & tanggungan", "", `
-        <div class="field"><span class="lbl">Status</span><div class="chips">${STATUS.map(o => chip("profile.status", o.id, o.label, false)).join("")}${p.customStatuses.map(n => customOpt("status", n)).join("")}${adderToggle("status")}</div></div>
-        ${adderRow("status")}
         <div class="field"><span class="lbl" id="dep-lbl">Jumlah orang yang Anda tanggung</span>
           <div class="counter" role="group" aria-labelledby="dep-lbl"><button type="button" data-inc="profile.dependents" data-d="-1" aria-label="Kurangi">−</button><output class="num">${p.dependents}</output><button type="button" data-inc="profile.dependents" data-d="1" aria-label="Tambah">+</button></div>
           <span class="hint">Pasangan, anak, orang tua yang Anda biayai.</span></div>
@@ -663,7 +656,7 @@
     $("#nextBtn").style.opacity = valid ? "1" : ".5";
     const hint = $("#hint");
     const ewPart = STEPS[S.step].id === "ewallet" && walletProgress();
-    hint.textContent = valid && ewPart?.partial ? `Bisa lanjut. ${ewPart.missing.length} e-wallet belum terhubung.` : valid ? (last ? "Semua siap." : "Siap lanjut.") : (errs.x || errs.fullName || errs.phone || errs.username || errs.password || errs.city || errs.cityOther || "Lengkapi bagian wajib untuk lanjut");
+    hint.textContent = valid && ewPart?.partial ? `Bisa lanjut. ${ewPart.missing.length} e-wallet belum terhubung.` : valid ? (last ? "Semua siap." : "Siap lanjut.") : (errs.x || errs.fullName || errs.phone || errs.password || errs.city || errs.cityOther || "Lengkapi bagian wajib untuk lanjut");
     hint.classList.toggle("ok", valid);
     document.title = `${STEPS[S.step].label} · Laju`;
   }
@@ -1220,7 +1213,6 @@
     if (!parts || stepId === "akun" || stepId === "pengeluaran") return e;
     const msg = (parts.includes("aplikasi") && !p.platforms.length && "Pilih minimal satu aplikasi.")
       || (parts.includes("kendaraan") && !(p.vehicle && p.ownership) && "Pilih kendaraan dan status kepemilikannya.")
-      || (parts.includes("keluarga") && !p.status && "Pilih status keluarga.")
       || (parts.includes("uang") && !p.channels.length && "Pilih lewat mana saja uang Anda masuk dan keluar.")
       || (parts.includes("tujuan") && (!r.goals.length ? "Pilih minimal satu tujuan." : !r.primaryGoal ? "Pilih tujuan yang paling penting." : r.wantsBankLoan == null ? "Jawab rencana pinjaman resmi." : ""));
     return msg ? { x: msg } : {};
@@ -1230,7 +1222,7 @@
     const errs = editErrors();
     if (!Object.keys(errs).length) return true;
     ui.showErrors = true; render(true);
-    toast(errs.x || errs.fullName || errs.phone || errs.username || errs.city || errs.cityOther || "Lengkapi bagian wajib dulu");
+    toast(errs.x || errs.fullName || errs.phone || errs.city || errs.cityOther || "Lengkapi bagian wajib dulu");
     return false;
   }
   // Lanjut: langkah berikutnya di bagian ini, lalu bagian Profil berikutnya. Bagian terakhir kembali ke Profil.

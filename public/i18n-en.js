@@ -44,7 +44,7 @@ window.LAJU_EN = {
   "Penghasilan Anda nyata.": "Your income is real.",
   "Sekarang buktikan.": "Now prove it.",
   "Tanpa slip gaji, Anda tetap bisa layak kredit. Laju membaca pola keuangan harian Anda, membantu membereskan utang mahal, dan menyusun rekam jejak yang bisa dibawa ke bank.": "No payslip? You can still qualify for credit. Laju reads your daily money patterns, helps clear expensive debt, and builds a track record you can take to a bank.",
-  "Mulai dalam {0} menit": "Start in {0} minutes",
+  "Mulai sekarang!": "Start now!",
   "Cara kerjanya": "How it works",
   "Bukan aplikasi pinjaman. Tanpa KTP. Tidak pernah meminta PIN.": "Not a loan app. No ID card. Never asks for your PIN.",
   "Contoh tampilan skor kesehatan finansial": "Sample financial health score",
@@ -684,7 +684,7 @@ window.LAJU_EN = {
   "Pilih kota tempat Anda paling sering narik.": "Pick the city where you drive most.",
   "Ketik nama kota Anda.": "Type your city name.",
   // profil
-  "Cerita sedikit soal cara Anda narik": "Tell us how you drive",
+  "Profil Anda": "Your profile",
   "Cara Anda narik menentukan pola pendapatan.": "How you drive shapes your income pattern.",
   "Aplikasi yang Anda pakai": "Apps you use",
   "Boleh pilih lebih dari satu.": "Pick as many as apply.",

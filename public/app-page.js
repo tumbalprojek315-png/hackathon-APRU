@@ -986,7 +986,7 @@
     const sum = {
       identitas: `${S.account.fullName || "-"} · ${S.account.city ? cityLabel() : "-"}`,
       kerja: `${p.platforms.map(platformName).join(", ") || "-"} · ${p.vehicle === "mobil" ? "Mobil" : "Motor"} ${(OWNERSHIP.find(o => o.id === p.ownership)?.label || "").toLowerCase()} · ${p.hoursPerDay} jam × ${p.daysPerWeek} hari`,
-      keluarga: `${statusLabel(p.status) || "-"} · ${p.dependents} tanggungan${p.sideJobs.length ? ` · ${p.sideJobs.join(", ")}` : ""}`,
+      keluarga: `${p.dependents} tanggungan${p.sideJobs.length ? ` · ${p.sideJobs.join(", ")}` : ""}`,
       tabungan: `Dana darurat ${rpShort(Number(r.savings) || 0)}${(GOAL_STEPS[r.primaryGoal] || GOAL_STEPS[""]).kind === "pot" && r.primaryGoal ? ` · Tujuan ${rpShort(Number(r.goalSaved) || 0)}` : ""}`,
       uang: `${(p.channels || []).map(channelLabel).join(", ") || "-"} · rekening bank ${p.hasBank ? "ada" : "belum"}`,
       ewallet: (() => { const w = ch.connected.length + ch.notConnected.length;
