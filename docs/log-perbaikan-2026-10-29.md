@@ -356,3 +356,44 @@ Diuji: contoh e statement Jago di onboarding menampilkan angka bulat dan kalimat
 | Catatan tenggat tujuan wajib (`goalDeadlineWarning`) | Perkiraan "sekitar 17 bulan lagi sampai Step 3" dihapus karena membingungkan dan rumusnya tidak menghitung tabungan yang sudah ada. Gantinya, untuk tiap tujuan wajib yang punya tenggat: "Biaya pendidikan awal Rp500.000 jatuh 13/11/2026. Sisihkan sekitar Rp63.000 per hari mulai sekarang." Kalau angka per hari lebih besar dari sisa uang harian, catatannya menyarankan cicil, cari keringanan, atau kecilkan nominal. Tenggat yang sudah lewat diminta diperbarui |
 
 Diuji dengan riwayat GoPay asli (Oktober 2026, 5 transaksi): kelimanya terbaca dengan arah dan jumlah yang benar, nomor pemilik terbaca, kartu menampilkan pengeluaran Rp255.895. Catatan: kepala dokumen menulis total pengeluaran Rp355.895, selisih Rp100.000 dari baris transaksi yang ada. Belum diketahui dari mana selisihnya, jadi total kepala dokumen belum dipakai sebagai pengecekan. Catatan tenggat diuji ID dan EN, tidak ada galat di konsol.
+
+## Y. Branch trial (6 Nov): cek bulanan, Majukan 30 hari, rapor bulanan, pergerakan per bulan
+
+Diambil dari grace-v2 dan ditulis ulang supaya cocok dengan tangga main (data, minus, bantalan, darurat, investasi, tumbuh). Aturan tangga tidak diubah. Tangga bergerak karena datanya diperbarui.
+
+| Bagian | Perubahan |
+|---|---|
+| Jam simulasi (`public/sim-clock.js`, `server.py`) | Tombol "Majukan 30 hari (simulasi)" di Beranda memajukan jam halaman 30 hari (Date ikut maju) dan mengirim jumlah harinya ke server lewat header `X-Laju-Hari`. Server memakai tanggal itu untuk membuat transaksi simulasi, menghitung ringkasan 30 hari, riwayat per bulan, dan contoh e statement. Hanya di mode simulasi. Tombol reset menghapusnya |
+| Simulasi e-wallet (`openfinance/mock.py`) | Tiap hari dibuat dari benihnya sendiri, jadi transaksi bulan lalu tidak berubah saat jam dimajukan. Tagihan bulanan tetap per dompet (dulu muncul acak). Hari setelah tanggal asli hari ini dianggap driver mengikuti rencana: belanja turun sekitar 8% per bulan, paling banyak 40%. Ini asumsi demo dan ditulis di kartu |
+| Contoh e statement (`openfinance/statement.py`, `server.py`) | Sama: benih per hari dan asumsi belanja yang sama. Sisi rekening dari pindahan dompet ikut dimuat lagi saat contoh bulan berikutnya diunggah ke e statement yang sama |
+| Cek bulanan (`monthlyChecks`, `recordCheck` di `core.js`, `checkCard` di `app-page.js`) | Tiap 30 hari sejak onboarding selesai muncul kartu "Cek bulan ke N dari 6": perbarui data (sinkron ulang e-wallet; di simulasi e statement diisi contoh bulan berikutnya), jawab dua pertanyaan (utang baru, kejadian mendadak), simpan. Setelah sinkron, isian diisi ulang dari transaksi seperti saat onboarding (`autofillFromVerified`). Tiap cek menyimpan potret (`snapshotMetrics`), tier, dan posisi tangga. Hasilnya dibanding cek sebelumnya atau awal onboarding |
+| Rapor bulanan (`monthlyReport`) | Satu baris per cek: skor, sisa per bulan, dana darurat, total utang, tahap. Grafik skor per cek. Setelah 6 cek judulnya "Rapor 6 bulan" |
+| Pergerakan per bulan (`monthlyMovement` di `core.js`, `movementCard`) | Grafik dan tabel pendapatan aplikasi, uang keluar, dan sisa per 30 hari dari akun terhubung, dengan perubahan dibanding bulan sebelumnya. Memakai bulan yang dicakup penuh semua akun (jejak per bulan, bagian W) |
+
+Catatan uji (simulasi GoPay + OVO, 6 kali Majukan 30 hari): tanpa rekening bank, tahap 1 sering mundur karena tarik saldo ke rekening yang tidak terdaftar dihitung uang keluar (aturan bagian T). Dengan contoh e statement BRI, pindahannya berpasangan dan tangga stabil di tahap 2. Dana darurat tidak bertambah sendiri: setoran tetap dicatat lewat + Catat. ID dan EN diuji, tidak ada galat di konsol.
+
+## Y2. Branch trial (6 Nov): tangga grace-v2 dengan onboarding main
+
+Supaya dua versi tangga bisa dibandingkan. Onboarding, pembaca transaksi, dan server tetap versi main. Halaman setelah onboarding (Beranda, Tangga, Rapor, Profil) dan mesin tangganya diambil dari grace-v2.
+
+| Bagian | Isi |
+|---|---|
+| Tangga (`stepDefs`, `buildMilestones` di `core.js`) | Fondasi data, Keluar dari minus (budget harian), Utang jangka pendek + bantalan mini 3 hari, Dana darurat 30 hari, Investasi 10% selama 3 bulan (dari main, `investStep`), Tujuan utama, dan Siap ajukan kredit kalau driver mau pinjam |
+| Dari grace-v2 | Budget harian, hari bertahan, cek pengeluaran harian, setoran harian dengan penggeser dan pembagiannya ke bantalan, urutan pelunasan utang jangka pendek, simulasi pelunasan, pengingat jatuh tempo dan tombol Sudah bayar, jalur cicilan jangka panjang, jalur darurat, perjalanan 6 bulan dengan alasan tiap tahap, grafik pendapatan per bulan dan ringkasan untuk bank di Profil, skor kesehatan grace-v2 (arus kas 30, tabungan 30, utang 30, rencana 10) |
+| Tetap dari main | Analisis Gemini di Rapor, uang tumbuh (+ Catat setor dan ambil uang tumbuh) untuk tahap investasi, status data (`dataTrust`) dengan jejak per bulan. Mode sakit tidak dibawa |
+| Tetap dari trial | Cek bulanan dengan jam simulasi di server (Majukan 30 hari), pergerakan per bulan di Rapor |
+| Penyesuaian data | Pengeluaran per hari per kelompok diambil dari isian per kategori main (`expDailyOf`). Tujuan utama = tujuan pertama yang dipilih di onboarding, nominal dan tenggatnya dari `goalData`. Cicilan utang memakai isian cicilan main kalau ada. Utang jangka pendek atau panjang mengikuti jenisnya (`defaultTerm`) |
+
+Catatan uji: semua halaman tampil tanpa galat (server dan mode contoh, ID dan EN). Dengan jam dimajukan, skor bisa turun karena tagihan yang tidak ditandai Sudah bayar jadi lewat jatuh tempo. Itu perilaku yang benar, jadi saat demo tandai tagihan yang dibayar.
+
+## Y3. Branch trial (6 Nov): skenario demo dan "Jalankan rencana"
+
+| Bagian | Isi |
+|---|---|
+| Skenario demo (`startScenario` di `app-page.js`) | Tombol "Skenario demo: e-wallet + e statement" di Beranda sebelum onboarding (mode simulasi). Membuat driver Rudi: GoPay dan OVO terhubung lewat simulasi, rekening BRI lewat contoh e statement, Paylater Rp900 rb dan Pinjol Rp1,5 jt (jangka pendek), cicilan motor Rp14 jt (Rp1,4 jt/bln), dana darurat Rp100 rb, tujuan modal usaha Rp1,5 jt, mau mengajukan kredit. Sewa kontrakan dibayar tunai jadi diisi sendiri, besarnya dibuat supaya driver mulai dari minus sekitar Rp40 rb per hari di atas budget |
+| Jalankan rencana + majukan 30 hari (`runPlanMonth`) | Sebelum jam dimajukan, Laju mencatat 30 hari ke depan seolah driver mengikuti rencana: setoran harian × 30 dibagi seperti kartu Rencana (bantalan, dana darurat, tujuan, utang), utang jangka pendek dibayar sesuai urutan pelunasan, tagihan yang jatuh tempo tercatat tepat waktu, cicilan jangka panjang dibayar sesuai jadwal, dan setelah dana darurat 30 hari penuh disetor uang tumbuh 10% pendapatan. Semua catatan diberi awalan "Simulasi:" di Aktivitas. Tombol "Majukan saja" tetap ada |
+| Setelah 6 cek | Tombol simulasi tetap muncul supaya tahap terakhir bisa diselesaikan |
+
+Hasil uji (skenario, tiap bulan: jalankan rencana, perbarui data, simpan cek): bulan 0 tahap Keluar dari minus aktif, bulan 1 selesai, bulan 2 utang jangka pendek lunas dan bantalan mini penuh, bulan 4 dana darurat 30 hari penuh, bulan 7 investasi 3 bulan beruntun selesai, lalu tujuan. Skor naik dari 39 ke 85. Angka persis berbeda tiap kali karena transaksi simulasi diacak per pengguna.
+
+**Tambahan Y3: skenario masuk ke data contoh.** Di mode simulasi, tombol "Isi contoh" di onboarding dan "Data contoh" di app sekarang berputar ke empat contoh: Andi, Sudirman, Wayan, lalu Rudi (GoPay + OVO + e statement BRI). Lewat onboarding, contoh Rudi hanya mengisi langkah langkahnya; driver tetap menekan Lanjut sampai Hasil, lalu masuk app dengan tahap Keluar dari minus aktif. Isi skenarionya dipindah ke `buildScenario` di `core.js` supaya dipakai keduanya. Tanpa server (GitHub Pages) tetap tiga contoh.

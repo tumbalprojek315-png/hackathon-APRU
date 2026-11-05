@@ -406,3 +406,72 @@ body.editing #doneBtn { display: inline-flex; color: var(--fg); font-weight: 800
 .mc-net b { font-size: 1.05rem; white-space: nowrap; }
 .mc-net.pos b { color: var(--ok); }
 .mc-net.neg b { color: var(--danger); }
+
+
+/* ---------- dari grace-v2: grafik pendapatan, ringkasan bank, kotak status ---------- */
+/* ---------- dual-thumb range (one line, two handles) ---------- */
+.dual { position: relative; height: 32px; --a: 0%; --b: 100%; }
+.dual-track { position: absolute; left: 0; right: 0; top: 50%; height: 8px; transform: translateY(-50%); border-radius: 99px; background: var(--secondary); border: 1px solid var(--border); }
+.dual-fill { position: absolute; top: -1px; bottom: -1px; left: var(--a); right: calc(100% - var(--b)); background: var(--fg); border-radius: 99px; }
+.dual input[type="range"] { position: absolute; inset: 0; width: 100%; height: 32px; margin: 0; background: none; pointer-events: none; -webkit-appearance: none; appearance: none; }
+.dual input[type="range"]::-webkit-slider-runnable-track { background: none; border: 0; height: 32px; }
+.dual input[type="range"]::-moz-range-track { background: none; border: 0; }
+.dual input[type="range"]::-moz-range-progress { background: none; }
+.dual input[type="range"]::-webkit-slider-thumb { pointer-events: auto; margin-top: 4px; cursor: grab; }
+.dual input[type="range"]::-moz-range-thumb { pointer-events: auto; cursor: grab; }
+.dual input[type="range"]:focus-visible { outline: none; }
+.dual input[type="range"]:focus-visible::-webkit-slider-thumb { box-shadow: 0 0 0 4px color-mix(in oklab, var(--ring) 45%, transparent); }
+.dual input[type="range"]:focus-visible::-moz-range-thumb { box-shadow: 0 0 0 4px color-mix(in oklab, var(--ring) 45%, transparent); }
+.dual-val { font-size: .88rem; font-weight: 700; text-align: center; }
+.cat.off .cat-range { display: none; }
+.dual-ends { display: flex; justify-content: space-between; font-size: .7rem; color: var(--muted-fg); }
+/* ---------- dual range: rectangular handles with ← → arrows ---------- */
+.dual input[type="range"]::-webkit-slider-thumb {
+  width: 38px; height: 26px; margin-top: 3px; border-radius: 8px; border: 2px solid var(--fg); cursor: ew-resize;
+  background: var(--primary) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%231a1614' stroke-width='2.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m8 7-5 5 5 5M16 7l5 5-5 5'/%3E%3C/svg%3E") center / 20px no-repeat;
+}
+.dual input[type="range"]::-moz-range-thumb {
+  width: 34px; height: 22px; border-radius: 8px; border: 2px solid var(--fg); cursor: ew-resize;
+  background: var(--primary) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%231a1614' stroke-width='2.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m8 7-5 5 5 5M16 7l5 5-5 5'/%3E%3C/svg%3E") center / 18px no-repeat;
+}
+.dual input[type="range"]:active::-webkit-slider-thumb { cursor: grabbing; background-color: color-mix(in oklab, var(--primary) 80%, var(--fg)); }
+.cat-head .verified-amt { display: flex; width: fit-content; }
+/* e statement untuk dompet yang belum bisa dihubungkan (langkah E-wallet) */
+.st-box { margin-top: .5rem; display: grid; gap: .4rem; }
+.st-box .chips { margin: 0; }
+.doc-hist { display: grid; gap: 6px; }
+.doc-hist .kv { display: flex; justify-content: space-between; font-size: .8rem; }
+.doc-hist small { color: var(--muted-fg); font-size: .72rem; }
+.doc-recap { display: grid; gap: 10px; }
+/* grafik garis pendapatan terbukti per bulan (kartu Status data untuk bank) */
+.ih { margin: 4px 0 0; display: grid; gap: 8px; }
+.ih-plot { position: relative; height: 150px; margin: 14px 0 0; border-bottom: 1px solid var(--border); }
+.ih-plot svg { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
+.ih-max { position: absolute; top: -14px; left: 0; font-size: .66rem; color: var(--muted-fg); }
+.ih-zero { position: absolute; bottom: 2px; left: 0; font-size: .66rem; color: var(--muted-fg); }
+.ih-median { position: absolute; left: 0; right: 0; border-top: 1.5px dashed var(--muted-fg); }
+.ih-median i { position: absolute; right: 0; top: -15px; font-style: normal; font-size: .66rem; color: var(--muted-fg); background: var(--card); padding: 0 4px; }
+.ih-dot { position: absolute; width: 9px; height: 9px; margin: -4.5px 0 0 -4.5px; border-radius: 50%; background: var(--viz-in); box-shadow: 0 0 0 2px var(--card); pointer-events: none; }
+.ih-dot.doc { background: var(--viz-out); border-radius: 2px; }
+.ih-hit { position: absolute; top: 0; bottom: 0; width: 32px; margin-left: -16px; cursor: default; }
+.ih-hit:hover, .ih-hit:focus-visible { background: color-mix(in oklab, var(--fg) 6%, transparent); outline: none; border-radius: 6px; }
+.ih-x { position: relative; height: 16px; font-size: .7rem; color: var(--muted-fg); }
+.ih-x span { position: absolute; transform: translateX(-50%); }
+.ih-legend { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: .74rem; color: var(--muted-fg); }
+.ih-legend li { display: flex; align-items: center; gap: 6px; }
+.ih-key { display: inline-block; width: 14px; height: 0; border-top: 2px solid var(--viz-in); position: relative; }
+.ih-key.doc { border-top-color: var(--viz-out); }
+.ih-key.med { border-top: 1.5px dashed var(--muted-fg); }
+.ih-dot.ins { background: var(--viz-debt); border-radius: 1px; transform: rotate(45deg); }
+.ih-key.ins { border-top-color: var(--viz-debt); }
+.ih-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap: 8px; margin: 0; }
+.ih-stats div { background: var(--secondary); border-radius: .8rem; padding: 8px 10px; }
+.ih-stats dt { font-size: .66rem; font-weight: 600; color: var(--muted-fg); }
+.ih-stats dd { margin: 2px 0 0; font-weight: 800; font-size: .85rem; }
+.ih-stats dd small { font-weight: 500; color: var(--muted-fg); }
+.bank-sum { border-top: 1px solid var(--border); padding-top: 10px; display: block; min-width: 0; max-width: 100%; overflow: hidden; }
+.bank-sum > * + * { margin-top: 8px; }
+.bank-sum summary { cursor: pointer; font-weight: 700; font-size: .85rem; }
+.bank-sum .viz-table { overflow-x: auto; max-width: 100%; width: 100%; }
+.bank-sum table { min-width: 520px; }
+.bank-sum table { font-size: .74rem; }

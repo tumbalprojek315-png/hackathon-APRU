@@ -132,56 +132,75 @@ class MockProvider(Provider):
             extra={"seed": f"{sess['user_id']}:{sess['wallet_id']}:{last4}", "phone": phone},
         )
 
-    def fetch_transactions(self, account: LinkedAccount, days: int, peers: dict | list | tuple = ()) -> list[RawTransaction]:
+    def fetch_transactions(self, account: LinkedAccount, days: int, peers: dict | list | tuple = (),
+                           today: date | None = None) -> list[RawTransaction]:
         """`peers`: dompet lain milik pengguna yang sama yang sudah terhubung ({id: nomor HP} atau daftar id). Dipakai
-        supaya pindahan antar akun (tarik saldo ke rekening, top up dari rekening) punya pasangan di rekening bank."""
+        supaya pindahan antar akun (tarik saldo ke rekening, top up dari rekening) punya pasangan di rekening bank.
+
+        `today`: tanggal "hari ini" menurut jam simulasi (tombol Majukan 30 hari). Setiap hari dibuat dari benihnya
+        sendiri, jadi transaksi hari yang sama selalu sama walaupun jam dimajukan: bulan lalu tidak ikut berubah.
+        Hari setelah tanggal asli hari ini adalah "masa depan" simulasi: driver dianggap mengikuti rencana Laju, jadi
+        belanja turun sekitar 8% per bulan (paling banyak 40%). Ini asumsi demo, bukan data."""
         peers = peers if isinstance(peers, dict) else {p: "" for p in peers}
         prof = WALLET_PROFILES[account.wallet_id]
-        rnd = random.Random(account.extra.get("seed", account.access_token))
-        today = date.today()
-        off_weekday = rnd.randrange(7)              # satu hari libur tetap per minggu
-        intensity = rnd.uniform(0.8, 1.2)           # driver rajin vs santai
+        seed = account.extra.get("seed", account.access_token)
+        base = random.Random(seed)
+        real_today = date.today()
+        today = today or real_today
+        off_weekday = base.randrange(7)              # satu hari libur tetap per minggu
+        intensity = base.uniform(0.8, 1.2)           # driver rajin vs santai
+        bills = [b for b in MONTHLY_BILLS if base.random() < prof["spend"]]   # tagihan bulanan dompet ini tetap tiap bulan
+        opened = real_today - timedelta(days=prof["history"] - 1)   # riwayat yang bisa ditarik dihitung dari tanggal asli
         txs: list[RawTransaction] = []
 
-        def add(day: date, amount: int, direction: str, desc: str) -> None:
-            stamp = datetime.combine(day, time(rnd.randrange(6, 23), rnd.randrange(60)))
-            txs.append(RawTransaction(
-                id=f"{account.wallet_id}-{len(txs):04d}",
-                date=stamp.isoformat() + "+07:00",
-                amount=int(round(amount, -2)),
-                direction=direction,  # type: ignore[arg-type]
-                description=desc,
-            ))
-
-        for i in range(min(days, prof["history"])):
+        for i in range(days):
             day = today - timedelta(days=i)
+            if day < opened:
+                break
+            rnd = random.Random(f"{seed}:{day.toordinal()}")
+            ahead = max(0, (day - real_today).days) / 30
+            spend_f = max(0.6, 1 - 0.08 * ahead)
+            k = 0
+
+            def add(amount: float, direction: str, desc: str) -> None:
+                nonlocal k
+                stamp = datetime.combine(day, time(rnd.randrange(6, 23), rnd.randrange(60)))
+                txs.append(RawTransaction(
+                    id=f"{account.wallet_id}-{day:%Y%m%d}-{k:02d}",
+                    date=stamp.isoformat() + "+07:00",
+                    amount=int(round(amount, -2)),
+                    direction=direction,  # type: ignore[arg-type]
+                    description=desc,
+                ))
+                k += 1
+
             working = day.weekday() != off_weekday and rnd.random() > 0.06   # sesekali sakit / libur
             if prof["payout"] and working:
                 _, desc, (lo, hi) = prof["payout"]
-                add(day, rnd.uniform(lo, hi) * intensity, "in", desc)
+                add(rnd.uniform(lo, hi) * intensity, "in", desc)
                 if rnd.random() < 0.15:
-                    add(day, rnd.uniform(10_000, 40_000), "in", desc.split(" - ")[0] + " - Bonus insentif harian")
+                    add(rnd.uniform(10_000, 40_000), "in", desc.split(" - ")[0] + " - Bonus insentif harian")
 
             if rnd.random() < 0.03:
-                add(day, rnd.uniform(50_000, 300_000), "in", "Transfer dari RAHMAT HIDAYAT")
+                add(rnd.uniform(50_000, 300_000), "in", "Transfer dari RAHMAT HIDAYAT")
             for desc, (lo, hi), p in SPEND_TEMPLATES:
                 if rnd.random() < p * prof["spend"] * (1 if working else 0.5):
-                    add(day, rnd.uniform(lo, hi), "out", desc)
-            for desc, (lo, hi), dom in MONTHLY_BILLS:
-                if day.day == dom and rnd.random() < prof["spend"]:
-                    add(day, rnd.uniform(lo, hi), "out", desc)
+                    add(rnd.uniform(lo, hi) * spend_f, "out", desc)
+            for desc, (lo, hi), dom in bills:
+                if day.day == dom:
+                    add(rnd.uniform(lo, hi), "out", desc)
             # transaksi yang tidak dikenali (QRIS tanpa nama jelas, dana masuk tanpa keterangan)
-            if rnd.random() < prof["unknown"]:
-                add(day, rnd.uniform(20_000, 150_000), "out", f"Pembayaran QRIS NMID ID{rnd.randrange(10**9, 10**10)}")
+            if rnd.random() < prof["unknown"] * spend_f:
+                add(rnd.uniform(20_000, 150_000), "out", f"Pembayaran QRIS NMID ID{rnd.randrange(10**9, 10**10)}")
             if rnd.random() < 0.01:
-                add(day, rnd.uniform(100_000, 500_000), "in", f"Dana masuk REF{rnd.randrange(10**6, 10**7)}")
+                add(rnd.uniform(100_000, 500_000), "in", f"Dana masuk REF{rnd.randrange(10**6, 10**7)}")
             # pindahan dengan rekening bank: jadwalnya tetap per dompet, jadi rekening bank bisa membuat pasangannya
             if account.wallet_id != "bank":
                 for kind, amt, _, _, _ in _transfers(account.wallet_id, day):
                     if kind == "tarik":
-                        add(day, amt, "out", "Tarik saldo ke rekening BRI")
+                        add(amt, "out", "Tarik saldo ke rekening BRI")
                     else:
-                        add(day, amt, "in", "Top up saldo dari BRI")
+                        add(amt, "in", "Top up saldo dari BRI")
             else:
                 for peer in peers:
                     if peer == "bank" or peer not in WALLET_PROFILES:
@@ -193,12 +212,12 @@ class MockProvider(Provider):
                             if (day - src_day).days != lag:
                                 continue
                             if kind == "tarik":
-                                add(day, amt - fee, "in", f"Transfer masuk dari {label}")
+                                add(amt - fee, "in", f"Transfer masuk dari {label}")
                             else:
-                                add(day, amt + fee, "out", topup_desc(peer, peers[peer], src_day))
+                                add(amt + fee, "out", topup_desc(peer, peers[peer], src_day))
                 # sesekali top up ke e-wallet orang lain (nomornya bukan milik pengguna): tetap pengeluaran
                 if peers and random.Random(f"other:{day.toordinal()}").random() < 0.06:
-                    add(day, rnd.uniform(50_000, 150_000), "out", f"Top up OVO {VA_PREFIX['ovo']}{OTHER_PHONE}")
+                    add(rnd.uniform(50_000, 150_000), "out", f"Top up OVO {VA_PREFIX['ovo']}{OTHER_PHONE}")
 
         return txs
 

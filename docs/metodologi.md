@@ -226,6 +226,12 @@ Dicakup di prototipe: kasus A1 sampai A5, B1, B2, B5, B6, C1 (dompet "Lainnya" +
 
 Hasilnya menjadi catatan di status data dan ikut di laporan bank. Tier tidak berubah karenanya. E statement dihitung dengan cara yang sama dengan e-wallet: angka utama dari 30 hari terakhir dokumen, bulan sebelumnya hanya untuk riwayat.
 
+## 6c. Cek bulanan dan jam simulasi
+
+Tiap 30 hari sejak onboarding selesai, driver melakukan satu cek: perbarui data, jawab apakah ada utang baru dan kejadian mendadak, lalu simpan. Setiap cek menyimpan potret kondisi (skor, sisa per bulan, dana darurat, total utang, tier, posisi tangga). Enam cek menjadi Rapor 6 bulan. Cek tidak mengubah aturan tangga; isian diperbarui dari transaksi 30 hari terakhir, sama seperti saat onboarding.
+
+Untuk demo, mode simulasi punya tombol Majukan 30 hari. Transaksi untuk hari setelah tanggal asli hari ini dibuat generator dengan anggapan driver mengikuti rencana: belanja turun sekitar 8% per bulan, paling banyak 40%. Angka bulan bulan sebelumnya tidak berubah karena setiap hari punya benih acaknya sendiri.
+
 ## 7. Sumber
 
 - Financial Health Network: FinHealth Score methodology: https://finhealthnetwork.org/score/score-methodology/

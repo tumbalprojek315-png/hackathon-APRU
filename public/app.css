@@ -442,16 +442,6 @@ body.no-fab .bottomnav { display: none; }
 .prow-txt small { font-size: .82rem; color: var(--fg); opacity: .7; }
 .ai-card > summary { display: block; }
 .ai-card > summary small { display: block; margin-top: 2px; }
-.ai-run { display: grid; gap: 8px; margin: 10px 0; }
-.ai-out { margin: 10px 0; font-size: .9rem; }
-.ai-out h3 { font-size: .95rem; margin: 14px 0 4px; }
-.ai-out ul, .ai-out ol { padding-left: 1.2em; margin: 0; }
-.ai-out li { margin: 4px 0; }
-.ai-sum { font-weight: 700; margin: 0 0 6px; }
-.ai-warn li { color: var(--st-critical-ink); }
-.ai-fix li { display: grid; gap: 2px; }
-.ai-fix a { font-weight: 700; }
-.ai-fix span { font-size: .84rem; opacity: .8; }
 
 /* ---------- Dashboard: 6 bagian berurutan ---------- */
 .stack.dash { gap: 16px; }
@@ -553,6 +543,10 @@ body.no-fab .bottomnav { display: none; }
 .lane-btn .icon { width: 16px; height: 16px; }
 .lane-mini { background: color-mix(in oklab, var(--viz-debt) 16%, var(--card)); border: 2px solid var(--viz-debt); }
 .lane-mini .lane-txt b { color: var(--viz-debt); }
+.score-link { display: flex; align-items: center; gap: 12px; text-decoration: none; color: inherit; margin-top: 18px; }
+.score-link span:first-child { flex: 1; display: flex; flex-direction: column; }
+.score-link small { color: var(--muted-fg); font-size: .8rem; }
+.score-link .chev { font-size: 1.5rem; color: var(--muted-fg); }
 .pager .nx.locked { opacity: .55; cursor: not-allowed; }
 .pager .nx.locked .icon { width: 12px; height: 12px; vertical-align: -1px; }
 .mtrack li.locked .node { background: var(--secondary); border-style: dashed; opacity: .6; }
@@ -592,13 +586,96 @@ body.no-fab .bottomnav { display: none; }
 .tr-txt small { font-size: .82rem; color: var(--muted-fg); }
 .tr-list { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 6px; font-size: .86rem; }
 .tr-list li span { margin-right: 6px; }
+.why-line { margin: 10px 0 0; display: flex; gap: 8px; align-items: flex-start; font-size: .9rem; line-height: 1.5; }
+.why-line .icon { width: 18px; height: 18px; flex: none; margin-top: 2px; }
+/* Perjalanan 6 bulan (Beranda): langkah sekarang + cek bulanan dalam satu kartu */
+.jy-meter { display: grid; grid-template-columns: repeat(6, 1fr); gap: 6px; }
+.jy-meter i { height: 8px; border-radius: 99px; background: var(--secondary); }
+.jy-meter i.on { background: var(--fg); }
+.fc-why { font-size: .86rem; line-height: 1.5; opacity: .85; }
+.mc-in { display: flex; flex-direction: column; gap: 12px; padding-top: 14px; border-top: 1.5px solid var(--border); }
+.mc-in.due { border-top-color: var(--fg); }
+.mc-h { margin: 0; font-size: 1rem; font-weight: 800; }
+.mc-h small { display: block; font-weight: 500; font-size: .8rem; color: var(--muted-fg); }
+.mc-next { margin: 0; display: flex; gap: 8px; align-items: flex-start; font-size: .88rem; color: var(--muted-fg); }
+.mc-next .icon { width: 18px; height: 18px; flex: none; margin-top: 2px; }
+.mc-result { padding: 14px; border-radius: 1.1rem; background: color-mix(in oklab, var(--primary) 35%, var(--card)); display: flex; flex-direction: column; gap: 8px; }
+.mc-result .mc-h { display: flex; gap: 6px; align-items: center; font-size: .92rem; }
+.mc-result .mc-h svg { width: 16px; height: 16px; }
+.mc-delta { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 4px; font-size: .86rem; }
+.mc-delta li { display: flex; justify-content: space-between; gap: 10px; }
+/* Cek bulanan (Beranda): tiap 30 hari, 6 cek = rekam jejak 6 bulan */
+.mc-card .fc-track { background: var(--secondary); }
+.mc-card .fc-track i { background: var(--fg); }
+.mc-card.due { border-color: var(--fg); }
+.mc-steps { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 12px; font-size: .9rem; }
+.mc-steps li > b { display: block; }
+.mc-steps small { display: block; color: var(--muted-fg); line-height: 1.5; }
+.mc-steps .field { margin: 0; }
+/* grace-v2: pengingat tagihan, budget harian, hitung mundur tahap 3 */
+.remind-card { border-color: var(--fg); }
+.remind-card h2 .icon { width: 18px; height: 18px; vertical-align: -3px; margin-right: 4px; }
+.rm-list { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 12px; }
+.rm-list li { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; justify-content: space-between; }
+.rm-txt b { display: block; font-size: .95rem; }
+.rm-txt small { display: block; font-size: .82rem; color: var(--muted-fg); }
+.rm-list li.late .rm-txt small { color: var(--st-critical); font-weight: 700; }
+.bd-top { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 12px; }
+.bd-top > b { font-size: 1.7rem; font-weight: 800; letter-spacing: -.02em; }
+.bd-top > span { font-size: .86rem; color: var(--muted-fg); }
+.bd-week { margin: 0; padding: 0; list-style: none; display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; }
+.bd-week li { display: flex; flex-direction: column; align-items: center; gap: 4px; }
+.bd-week i { width: 100%; height: 10px; border-radius: 99px; background: var(--secondary); }
+.bd-week li.ok i { background: var(--st-good); }
+.bd-week li.near i { background: var(--st-warn); }
+.bd-week li.over i { background: var(--st-critical); }
+.bd-week li.none i { background: repeating-linear-gradient(90deg, var(--secondary) 0 4px, transparent 4px 7px); border: 1px solid var(--border); }
+.bd-week small { font-size: .68rem; color: var(--muted-fg); }
+.sd-big { margin: 0; font-size: 1.6rem; font-weight: 800; letter-spacing: -.02em; line-height: 1.2; }
+.sd-big small { font-size: .86rem; font-weight: 600; color: var(--muted-fg); letter-spacing: 0; }
+.sd-line { position: relative; height: 18px; margin: 4px 8px; }
+.sd-rail { position: absolute; left: 0; right: 0; top: 7px; height: 4px; border-radius: 99px; background: var(--secondary); }
+.sd-mark { position: absolute; top: 2px; width: 14px; height: 14px; margin-left: -7px; border-radius: 99px; background: var(--fg); border: 2px solid var(--card); }
+.sd-marks { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 4px; font-size: .84rem; }
+.sd-marks li { display: flex; justify-content: space-between; gap: 10px; }
+.sd-marks small { color: var(--muted-fg); }
+.sd-why { margin: 0; font-size: .84rem; line-height: 1.45; color: var(--muted-fg); }
+.fc-fix { display: flex; gap: 10px; align-items: center; padding: 12px 14px; border-radius: 1.1rem; border: 1.5px solid var(--st-warn); background: color-mix(in oklab, var(--st-warn) 12%, var(--card)); color: inherit; text-decoration: none; }
+.fc-fix .icon { width: 18px; height: 18px; flex: none; }
+.fc-fix b { display: block; font-size: .9rem; }
+.fc-fix small { display: block; font-size: .8rem; color: var(--muted-fg); }
+.fc-fix .chev { margin-left: auto; font-size: 1.4rem; color: var(--muted-fg); }
 
-/* Tangga: rincian skor selalu terbuka, komponen yang belum penuh bisa diketuk */
-.score-sec { margin-top: 18px; }
-.pt.fixable { padding: 0; }
-.pt-link { display: flex; flex-direction: column; gap: 6px; width: 100%; padding: 10px 12px; border: 0; border-radius: .9rem; background: none; color: inherit; font: inherit; text-align: left; text-decoration: none; cursor: pointer; }
-.pt-link:hover { background: color-mix(in oklab, var(--fg) 6%, var(--secondary)); }
-.pt-link:focus-visible { outline: 3px solid var(--ring); outline-offset: 2px; }
-.pt-fix { display: grid; gap: 4px; padding-top: 6px; border-top: 1px dashed var(--border); font-size: .76rem; line-height: 1.45; }
-.pt-fix b { font-size: .8rem; text-decoration: underline; text-underline-offset: 3px; }
-.pt-fix b i { font-style: normal; text-decoration: none; display: inline-block; margin-left: 4px; }
+/* ---------- Analisis Gemini (dari main) ---------- */
+.ai-card > summary { display: block; }
+.ai-card > summary small { display: block; margin-top: 2px; }
+.ai-run { display: grid; gap: 8px; margin: 10px 0; }
+.ai-out { margin: 10px 0; font-size: .9rem; }
+.ai-out h3 { font-size: .95rem; margin: 14px 0 4px; }
+.ai-out ul, .ai-out ol { padding-left: 1.2em; margin: 0; }
+.ai-out li { margin: 4px 0; }
+.ai-sum { font-weight: 700; margin: 0 0 6px; }
+.ai-warn li { color: var(--st-critical-ink); }
+.ai-fix li { display: grid; gap: 2px; }
+.ai-fix a { font-weight: 700; }
+.ai-fix span { font-size: .84rem; opacity: .8; }
+
+/* ---------- Cek bulanan dan rapor bulanan ---------- */
+.chk-card.due { border-color: color-mix(in oklab, var(--viz-in) 45%, var(--border)); }
+.chk-card > p { margin: 0 0 10px; font-size: .9rem; }
+.chk-steps { list-style: none; margin: 0; padding: 0; display: grid; gap: 14px; counter-reset: chk; }
+.chk-steps > li { counter-increment: chk; position: relative; padding-left: 36px; display: grid; gap: 6px; }
+.chk-steps > li::before { content: counter(chk); position: absolute; left: 0; top: -2px; width: 26px; height: 26px; border-radius: 99px; display: grid; place-items: center; font-size: .78rem; font-weight: 800; border: 1.5px solid var(--border); background: var(--card); }
+.chk-steps > li.done::before { content: "✓"; background: var(--fg); color: var(--card); border-color: var(--fg); }
+.chk-steps small { color: var(--muted-fg); font-size: .82rem; }
+.chk-steps .field { margin: 4px 0 0; }
+.chk-sim { display: grid; gap: 6px; margin-top: 6px; padding-top: 12px; border-top: 1px dashed var(--border); }
+.chk-sim .hint { margin: 0; }
+.tbl-wrap { overflow-x: auto; margin: 0 -4px; padding: 0 4px; }
+.mr-table { font-size: .78rem; }
+.mr-table th, .mr-table td { padding: 8px 3px; }
+.mr-table tbody th { white-space: nowrap; }
+.mr-table th small { display: block; font-weight: 500; color: var(--muted-fg); font-size: .72rem; }
+.mr-table td.n:nth-child(2) { color: inherit; }
+.mv-sum { margin: 0 0 8px; font-size: .9rem; }
+

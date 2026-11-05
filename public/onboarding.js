@@ -1467,9 +1467,19 @@
   }
 
 
-  $("#demoBtn").addEventListener("click", () => {
+  $("#demoBtn").addEventListener("click", async () => {
     const keep = { step: S.step, maxStep: STEPS.length - 1, wallets: S.wallets };
-    S = nextDemoState();
+    const pick = nextDemoState();
+    if (!pick) {   // contoh ke-4: driver dengan GoPay, OVO, dan e statement BRI, lewat server simulasi
+      toast("Menyiapkan contoh e-wallet + e statement…");
+      try { await buildScenario({ finish: false }); } catch (e) { toast(`Contoh gagal disiapkan: ${e.message}`); return; }
+      Object.assign(S, { step: keep.step, maxStep: STEPS.length - 1 });
+      ui.analysisIdx = STEPS[S.step].id === "hasil" ? ANALYSIS.length : 0;
+      save(); render(true);
+      toast("Contoh: Rudi, GoPay + OVO + e statement BRI");
+      return;
+    }
+    S = pick;
     Object.assign(S, keep);
     S.consent.useWallet = S.wallets.some(w => w.summary);   // tanpa e-wallet tersinkron, langkah E-wallet tidak boleh menahan
     // e statement tidak dijadikan pilihan dompet diam diam: hanya e-wallet bawaan yang ikut dipilih

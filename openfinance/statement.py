@@ -230,17 +230,20 @@ def sample_lines(name: str, seed: str, mirror: list[tuple[str, str, int]], platf
                  today: date | None = None) -> list[str]:
     """Isi e statement contoh 30 hari: pencairan narik, belanja, dan sisi rekening dari pindahan dengan dompet
     terhubung (`mirror` = [(tanggal ISO, keterangan, jumlah +masuk/-keluar)]) supaya pencocokan antar akun bisa didemokan."""
-    today = today or date.today()
-    rnd = random.Random(seed)
+    real_today = date.today()
+    today = today or real_today
     rows: list[tuple[str, str, int]] = []
     for i in range(days):
         d = today - timedelta(days=i)
+        # tiap hari punya benih sendiri: unggah contoh bulan berikutnya tidak mengubah hari yang sudah ada
+        rnd = random.Random(f"{seed}:{d.toordinal()}")
+        spend_f = max(0.6, 1 - 0.08 * max(0, (d - real_today).days) / 30)   # sama dengan simulasi e-wallet
         if rnd.random() < 0.55:
             rows.append((d.isoformat(), f"Pencairan pendapatan mitra {platform_label}", int(round(rnd.uniform(40_000, 110_000), -3))))
         if rnd.random() < 0.5:
-            rows.append((d.isoformat(), "Pembayaran QRIS Warung Makan Sederhana", -int(round(rnd.uniform(15_000, 35_000), -2))))
+            rows.append((d.isoformat(), "Pembayaran QRIS Warung Makan Sederhana", -int(round(rnd.uniform(15_000, 35_000) * spend_f, -2))))
         if rnd.random() < 0.3:
-            rows.append((d.isoformat(), "Pembayaran SPBU Pertamina", -int(round(rnd.uniform(20_000, 40_000), -2))))
+            rows.append((d.isoformat(), "Pembayaran SPBU Pertamina", -int(round(rnd.uniform(20_000, 40_000) * spend_f, -2))))
     start = (today - timedelta(days=days - 1)).isoformat()
     for day, desc, amt in mirror:
         if start <= day <= today.isoformat():

@@ -41,8 +41,22 @@ _users: dict[str, dict] = {}      # uid -> {"wallets": {wallet_id: record}}
 _sessions: dict[str, tuple[str, str]] = {}     # session_id -> (uid, nomor HP yang diisi di Izin data)
 
 
+# Jam simulasi (hanya mode simulasi): browser mengirim berapa hari jam sudah dimajukan lewat tombol "Majukan 30 hari"
+# (header X-Laju-Hari). Disimpan per permintaan, jadi tiap pengguna punya jamnya sendiri.
+_sim = threading.local()
+SIM_MAX_DAYS = 400
+
+
+def sim_days() -> int:
+    return getattr(_sim, "days", 0)
+
+
+def today() -> date:
+    return date.today() + timedelta(days=sim_days())
+
+
 def now_iso() -> str:
-    return datetime.now(timezone.utc).isoformat(timespec="seconds")
+    return (datetime.now(timezone.utc) + timedelta(days=sim_days())).isoformat(timespec="seconds")
 
 
 def public_view(rec: dict) -> dict:
@@ -84,7 +98,7 @@ def recalc_statement(rec: dict, overrides: dict | None = None) -> None:
     # Sama seperti e-wallet: angka utama = 30 hari terakhir di dokumen, tidak dirata ratakan dengan bulan lain.
     # Bulan sebelumnya hanya masuk riwayat per bulan, yang dihitung mundur dari hari ini supaya sejajar dengan e-wallet.
     summary, items = summarize(raw, PERIOD_DAYS, today=last, overrides=overrides)
-    summary["history"] = history(raw, overrides=overrides)
+    summary["history"] = history(raw, today=today(), overrides=overrides)
     rec.update(summary=summary, recent=items[:RECENT_LIMIT], **{"from": days[0], "to": days[-1]})
 
 
@@ -100,8 +114,8 @@ def recompute(user: dict) -> None:
     numbers.update({"c:" + n: r.get("phone", "") for n, r in stmts.items() if r.get("phone")})   # nomor di kepala e statement
     ov = pair_transfers(accounts, numbers)
     for r in wallets.values():
-        summary, items = summarize(r["raw"], PERIOD_DAYS, overrides=ov)
-        summary["history"] = history(r["raw"], overrides=ov)
+        summary, items = summarize(r["raw"], PERIOD_DAYS, today=today(), overrides=ov)
+        summary["history"] = history(r["raw"], today=today(), overrides=ov)
         r.update(summary=summary, recent=items[:RECENT_LIMIT])
     for r in stmts.values():
         if r.get("transactions"):
@@ -118,7 +132,7 @@ def sample_mirror(user: dict) -> list[tuple[str, str, int]]:
             d, low = date.fromisoformat(t.date[:10]), t.description.lower()
             h = sum(map(ord, t.id))
             if t.direction == "out" and low.startswith("tarik saldo"):
-                rows.append((min(d + timedelta(days=h % 2), date.today()).isoformat(), f"Transfer masuk dari {PEER_LABELS.get(wid, wid)}", t.amount - (2_500 if h % 3 == 0 else 0)))
+                rows.append((min(d + timedelta(days=h % 2), today()).isoformat(), f"Transfer masuk dari {PEER_LABELS.get(wid, wid)}", t.amount - (2_500 if h % 3 == 0 else 0)))
             elif t.direction == "in" and low.startswith("top up saldo dari"):
                 rows.append((d.isoformat(), topup_desc(wid, r.get("phone", ""), d), -(t.amount + (1_000 if h % 2 else 0))))
     if rows:   # top up ke e-wallet orang lain: nomornya bukan milik pengguna, jadi tetap pengeluaran
@@ -198,6 +212,13 @@ class Handler(SimpleHTTPRequestHandler):
             host = f"{HOST}:{PORT}"
         return f"http://{host}"
 
+    def _set_sim(self) -> None:
+        try:
+            d = int(self.headers.get("X-Laju-Hari") or 0)
+        except ValueError:
+            d = 0
+        _sim.days = 0 if provider.live else max(0, min(SIM_MAX_DAYS, d))
+
     def _guard(self) -> bool:
         """Perlindungan CSRF sederhana untuk permintaan yang mengubah data."""
         return self.headers.get("X-Requested-With") == "laju"
@@ -214,6 +235,7 @@ class Handler(SimpleHTTPRequestHandler):
         return super().do_HEAD()
 
     def do_GET(self):
+        self._set_sim()
         url = urlparse(self.path)
         if self._is_health():
             return self._health()
@@ -239,6 +261,7 @@ class Handler(SimpleHTTPRequestHandler):
         return self._error(404, "not_found", "Alamat API tidak dikenal.", uid)
 
     def do_POST(self):
+        self._set_sim()
         url = urlparse(self.path)
         uid = self._uid()
         if not self._guard():
@@ -288,6 +311,7 @@ class Handler(SimpleHTTPRequestHandler):
         return self._error(404, "not_found", "Alamat API tidak dikenal.", uid)
 
     def do_DELETE(self):
+        self._set_sim()
         url = urlparse(self.path)
         uid = self._uid()
         if not self._guard():
@@ -366,7 +390,7 @@ class Handler(SimpleHTTPRequestHandler):
             peers = {w: r.get("phone", "") for w, r in _users.get(uid[0], {}).get("wallets", {}).items() if w != wallet_id}
         try:
             # mode simulasi: penyedia tahu dompet lain yang terhubung, supaya pindahan antar akun punya pasangan
-            raw = (provider.fetch_transactions(rec["account"], HISTORY_DAYS, peers=peers) if not provider.live
+            raw = (provider.fetch_transactions(rec["account"], HISTORY_DAYS, peers=peers, today=today()) if not provider.live
                    else provider.fetch_transactions(rec["account"], HISTORY_DAYS))
         except ProviderError as e:
             return self._error(e.status, e.code, str(e), uid)
@@ -379,7 +403,7 @@ class Handler(SimpleHTTPRequestHandler):
         # mode simulasi: rekening bank dibuat ulang supaya pasangan pindahan dari dompet yang baru terhubung ikut ada
         if not provider.live and wallet_id != "bank" and bank and bank.get("raw") is not None:
             try:
-                braw = provider.fetch_transactions(bank["account"], HISTORY_DAYS,
+                braw = provider.fetch_transactions(bank["account"], HISTORY_DAYS, today=today(),
                                                    peers={w: r.get("phone", "") for w, r in user["wallets"].items() if w != "bank"})
                 with _lock:
                     bank["raw"] = braw
@@ -397,8 +421,10 @@ class Handler(SimpleHTTPRequestHandler):
         if sample:
             with _lock:
                 user = _users.get(uid[0], {})
-                mirror = sample_mirror(user) if not user.get("statements") else []
-            lines = stmt.sample_lines(name, seed=uid[0] + name, mirror=mirror, platform_label="Gojek")
+                # sisi rekening dari pindahan dompet hanya dimuat di satu e statement (yang pertama), termasuk saat
+                # contoh bulan berikutnya diunggah ke e statement yang sama
+                mirror = sample_mirror(user) if set(user.get("statements", {})) <= {name} else []
+            lines = stmt.sample_lines(name, seed=uid[0] + name, mirror=mirror, platform_label="Gojek", today=today())
             data, filename = stmt.build_pdf(name, lines), f"contoh-{name.lower()}.pdf"
         else:
             try:
