@@ -1442,9 +1442,22 @@ window.LAJU_EN = {
   "Pilih apakah Anda mau menghubungkan e-wallet.": "Choose whether you want to connect an e-wallet.",
   "Bersih +{0}": "Net +{0}",
   "Masuk {0}": "In {0}",
+  // ---------- peringatan dompet pencairan di Profil (5 Nov) ----------
+  "Pencairannya masuk ke mana?": "Where do your payouts go?",
+  "Lanjut saja": "Continue anyway",
+  "Bisa pilih beberapa.": "You can pick several.",
+  // ---------- nomor HP tiap e-wallet di Izin data (5 Nov) ----------
+  "Nomor HP tiap e-wallet": "Phone number for each e-wallet",
+  "Diisi dari nomor akun Laju. Ganti kalau e-wallet itu memakai nomor lain.": "Filled in from your Laju account number. Change it if that e-wallet uses another number.",
+  "Saat menghubungkan, nomor ini sudah terisi di halaman penyedia, jadi Anda tinggal memasukkan OTP. Nomornya harus sama dengan akun yang dihubungkan.": "When you connect, this number is already filled in on the provider's page, so you only need to enter the OTP. It must match the account you connect.",
 };
 
 window.LAJU_EN_RULES = [
+  ["^Nomor (\\S+) yang dihubungkan \\(akhiran (.+)\\) beda dengan nomor yang Anda isi di Izin data \\((.+)\\)\\. Hubungkan pakai nomor yang sama, atau ubah nomornya di Izin data\\.$",
+    "The $1 number you connected (ending $2) differs from the number you entered in Data consent ($3). Connect with the same number, or change it in Data consent."],
+  ["^Nomor (.+) sudah terisi\\. Anda tinggal memasukkan OTP$", "Number $1 is already filled in. You only need to enter the OTP"],
+  ["^Isi nomor HP ([^·]+) \\(minimal (.+) digit\\)\\.$", "Enter the $1 phone number (at least $2 digits)."],
+  ["^Nomor (GoPay|OVO|DANA|ShopeePay|LinkAja)$", "$1 number"],
   ["^Belum terhubung: ([^·]+)\.$", "Not connected yet: $1."],
   ["^Step \\{0\\} dari \\{1\\}: (.+)$", "Step {0} of {1}: $t1"],
   ["^Kerjakan step \\{0\\}: (.+)$", "Work on step {0}: $t1"],
@@ -1523,4 +1536,8 @@ window.LAJU_EN_RULES = [
   ["^([^·]+) sudah terhubung\\.$", "$1 is connected."],
   ["^Kalau dihapus dari pilihan, ([^·]+) diputus dan data transaksinya dihapus dari Laju\\.$", "Removing it disconnects $1 and deletes its transactions from Laju."],
   ["^([^·]+) disimpan$", "$t1 saved"],
+  ["^(.+), tapi dompet itu tidak Anda pilih\\. Kalau pencairannya masuk ke sana, tambahkan supaya pendapatannya terbaca\\. Kalau masuk ke dompet lain, lanjut saja\\.$", "$t1, but you didn't choose that wallet. If your payouts go there, add it so your income can be read. If they go to another wallet, just continue."],
+  ["^([^,]+) biasanya cair ke ([^,]+)$", "$1 usually pays out to $2"],
+  ["^Tambahkan ([^·]+)$", "Add $1"],
+  ["^([^·]+) ditambahkan$", "$1 added"],
 ];

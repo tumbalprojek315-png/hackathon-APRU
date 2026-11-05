@@ -176,10 +176,10 @@ def rp(n: int) -> str:
     return f"{n:,}".replace(",", ".")
 
 
-def sample_lines(name: str, seed: str, mirror: list[tuple[str, int]], platform_label: str, days: int = 30,
+def sample_lines(name: str, seed: str, mirror: list[tuple[str, str, int]], platform_label: str, days: int = 30,
                  today: date | None = None) -> list[str]:
-    """Isi e statement contoh 30 hari: pencairan narik, belanja, dan sisi masuk dari transfer GoPay -> JOJO
-    yang ada di dompet terhubung (`mirror` = [(tanggal ISO, jumlah)]) supaya pencocokan antar akun bisa didemokan."""
+    """Isi e statement contoh 30 hari: pencairan narik, belanja, dan sisi rekening dari pindahan dengan dompet
+    terhubung (`mirror` = [(tanggal ISO, keterangan, jumlah +masuk/-keluar)]) supaya pencocokan antar akun bisa didemokan."""
     today = today or date.today()
     rnd = random.Random(seed)
     rows: list[tuple[str, str, int]] = []
@@ -192,9 +192,9 @@ def sample_lines(name: str, seed: str, mirror: list[tuple[str, int]], platform_l
         if rnd.random() < 0.3:
             rows.append((d.isoformat(), "Pembayaran SPBU Pertamina", -int(round(rnd.uniform(20_000, 40_000), -2))))
     start = (today - timedelta(days=days - 1)).isoformat()
-    for day, amt in mirror:
-        if day >= start:
-            rows.append((day, "Transfer masuk dari GoPay", amt))
+    for day, desc, amt in mirror:
+        if start <= day <= today.isoformat():
+            rows.append((day, desc, amt))
     rows.sort()
     bal = 150_000 + sum(a for _, _, a in rows)
     out = [f"{name.upper()}  E STATEMENT / MUTASI REKENING", f"Periode: {start} s/d {today.isoformat()}",

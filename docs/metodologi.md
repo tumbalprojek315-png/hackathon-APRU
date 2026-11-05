@@ -44,6 +44,16 @@ Di Profil, pengguna memilih **lewat mana saja uangnya masuk & keluar**: GoPay, O
 
 Bila server dimulai ulang (izin e-wallet prototipe disimpan di memori), ringkasan terakhir tetap dipakai dan ditandai "Data terakhir" sampai e-wallet dihubungkan lagi.
 
+**Pindahan antar akun sendiri.** Tarik saldo, top up, dan transfer antar akun hanya dianggap pindahan (tidak dihitung sebagai pemasukan maupun pengeluaran) kalau akun satunya terdaftar di Laju dan pasangannya ketemu di sana:
+- arah berlawanan di akun yang berbeda;
+- jumlah keluar dikurangi jumlah masuk antara 0 dan Rp10.000, selisihnya dicatat sebagai "Biaya admin & transfer";
+- salah satu keterangan menyebut akun satunya;
+- uang masuk tercatat 0 sampai 1 hari kemudian antar e-wallet, 0 sampai 3 hari kalau melibatkan rekening bank atau e statement.
+
+**Nomor HP lebih dulu.** Nomor tiap e-wallet diisi di Izin data dan harus sama dengan nomor akun yang terhubung. Kalau keterangan menyebut nomor lengkap (termasuk di dalam nomor virtual account top up, yang terdiri dari kode bank + nomor HP), nomor itu yang menentukan: nomor milik akun terdaftar berarti pindahan sendiri, nomor orang lain berarti bukan, walaupun jumlah dan tanggalnya cocok. Nomor yang disamarkan hanya petunjuk. Aturan pasangan di atas dipakai kalau tidak ada nomor lengkap.
+
+Teks seperti "Top up dari OVO" saja tidak cukup, karena tidak menunjukkan OVO itu milik siapa. Uang keluar tanpa pasangan dihitung sebagai pengeluaran "Ke rekening atau dompet lain", uang masuk tanpa pasangan dihitung sebagai uang masuk lain. Semua akun dihitung ulang bersama setiap ada akun atau e statement yang ditambah atau dihapus (`pair_transfers` di `openfinance/categorize.py`).
+
 **Batasan kategorisasi.** Transaksi dikelompokkan dengan kata kunci di deskripsi (`openfinance/categorize.py`), misalnya "SPBU" → Bensin dan "GoFood" → Makan. Di simulasi hasilnya rapi karena deskripsinya dibuat generator. Di data asli banyak yang tidak dikenali (misalnya "QRIS TOKO SINAR JAYA"). Transaksi itu tetap dihitung di total e-wallet dan disebut di pengecekan. Untuk versi asli: pakai kode kategori merchant (MCC) QRIS bila penyedia open finance menyediakannya, plus tombol koreksi kategori oleh pengguna.
 
 ## 2. Skor kesehatan finansial (0–100)

@@ -25,13 +25,17 @@
     });
   }
 
+  // Semua e-wallet dan e statement di server dihapus sekaligus. Server lama tanpa endpoint itu: hapus satu per satu.
   async function dropServerWallets() {
     const h = { "X-Requested-With": "laju" };
     try {
+      const all = await fetch("/api/wallets", { method: "DELETE", credentials: "same-origin", headers: h });
+      if (all.ok) return;
       const res = await fetch("/api/wallets", { credentials: "same-origin", headers: h });
       if (!res.ok) return;
       const { wallets = [] } = await res.json();
-      await Promise.all(wallets.map(w => fetch(`/api/wallets/${w.walletId}`, { method: "DELETE", credentials: "same-origin", headers: h }).catch(() => {})));
+      const url = (id) => (id.startsWith("c:") ? `/api/statements?name=${encodeURIComponent(id.slice(2))}` : `/api/wallets/${id}`);
+      await Promise.all(wallets.map(w => fetch(url(w.walletId), { method: "DELETE", credentials: "same-origin", headers: h }).catch(() => {})));
     } catch (e) { /* server mati: data di perangkat tetap dihapus */ }
   }
 

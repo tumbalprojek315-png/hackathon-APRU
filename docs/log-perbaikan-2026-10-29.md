@@ -273,3 +273,59 @@ Diuji di layar 375x812, ID dan EN, dengan pilihan GoPay, OVO, tunai, dan JOJO di
 Dari branch grace hanya diambil pembaca PDF `openfinance/statement.py` (sudah diambil sebelumnya). Tampilan kartu dan pengirimannya ditulis sendiri memakai endpoint yang sudah ada.
 
 Diuji di layar 375x812, ID dan EN: Profil tidak lagi punya saklar rekening bank maupun pilihan Tunai dan Rekening bank. JOJO lewat Pakai contoh terbaca 36 transaksi, SeaBank lewat unggah PDF sungguhan terbaca 39 transaksi, dan setelahnya komponen skor Rekening bank berubah jadi Terbukti. Uji invarian dan kesepuluh uji penerimaan milestone tetap lolos.
+
+## S. Revisi 5 Nov (Grace, branch dickson): pilihan tujuan dan peringatan dompet pencairan
+
+| Bagian | Perubahan |
+|---|---|
+| Pilihan tujuan (`GOALS` di `core.js`) | "Modal menikah, tanggal sudah ditentukan", "Modal menikah, tanggal belum ada", dan "Kendaraan untuk kerja" dihapus. Sisa: biaya pendidikan awal, kendaraan pribadi, modal usaha sampingan, beli rumah. Data lama yang memilih tujuan itu dibersihkan oleh `migrate` (tujuan yang tidak ada di `GOALS` dibuang) |
+| Label Wajib dan Tumbuh | Tidak lagi tampil di pilihan tujuan dan di isian nominal per tujuan (langkah Ketahanan). Kelompoknya tetap dipakai di hitungan Step 3 dan Step 5 |
+| Saran dompet di Profil | Teks "Saran dari aplikasi Anda: GoPay, OVO" yang langsung muncul dihapus. Gantinya, saat menekan Lanjut di Profil, kalau ada aplikasi yang biasanya cair ke dompet yang tidak dipilih (Gojek ke GoPay, ShopeeFood dan SPX ke ShopeePay, Grab ke OVO, Maxim ke DANA), muncul peringatan dengan dua pilihan: "Tambahkan …" atau "Lanjut saja". Tidak wajib. Kalau ditutup tanpa memilih, tetap di Profil. Setelah "Lanjut saja", peringatan tidak muncul lagi untuk pilihan yang sama (`payoutWalletCheck` di `onboarding.js`) |
+| Dialog konfirmasi | Menutup dialog (Esc atau klik di luar) sekarang berarti "bukan pilihan", bukan "batal". Dialog lain tetap memperlakukannya sebagai batal |
+
+Diuji di layar 390x900, ID dan EN: Gojek + Grab dengan ShopeePay saja memunculkan peringatan GoPay dan OVO; Esc tetap di Profil; Tambahkan menambah GoPay dan OVO lalu Lanjut tanpa peringatan; Lanjut saja pindah ke Izin data tanpa mengubah dompet. Pilihan tujuan tinggal empat, tanpa label. Unggah e statement di langkah Dokumen (server berjalan): PDF contoh JOJO terbaca 39 transaksi.
+
+**Tambahan S: kotak "Sebagian, sisa lewat mana?" dihapus.** Di langkah Pendapatan dan Pengeluaran, kotak verifikasi dengan status Sebagian dan Tidak di e-wallet (isian lebih besar dari e-wallet, dengan pilihan Tunai, Rekening bank, E-wallet lain, Perkiraan kebesaran) tidak ditampilkan lagi (`vfShown` di `onboarding.js`). Kotak untuk isian yang lebih kecil dari e-wallet atau belum diisi tetap tampil, karena itu yang mengubah angka. Pengecekan "N selisih belum dijelaskan" ikut dihapus karena tidak ada lagi tempat menjawabnya.
+
+## T. Revisi 5 Nov (Grace, branch dickson): pindahan antar akun sendiri harus ada pasangannya
+
+Sebelumnya, transaksi seperti "Tarik saldo ke rekening BRI" atau "Top up dari OVO" langsung dianggap pindahan antar akun sendiri hanya dari teksnya, jadi tidak dihitung sebagai pengeluaran atau pemasukan. Masalahnya, teks hanya bilang uangnya lewat OVO, bukan OVO milik siapa. Bisa saja itu bayar utang ke orang lain atau kiriman dari teman.
+
+| Bagian | Perubahan |
+|---|---|
+| Aturan pindahan (`pair_transfers` di `openfinance/categorize.py`) | Transaksi baru dianggap pindahan antar akun sendiri kalau akun satunya sudah terdaftar di Laju **dan** pasangannya ketemu di akun itu: arah berlawanan, selisih jumlah 0 sampai Rp10.000 (selisihnya dianggap biaya admin), salah satu keterangan menyebut akun satunya, dan uang masuk tercatat 0 sampai 1 hari kemudian antar e-wallet, atau 0 sampai 3 hari kemudian kalau melibatkan rekening bank atau e statement |
+| Yang tidak ada pasangannya | Uang keluar dihitung sebagai pengeluaran kategori "Ke rekening atau dompet lain". Uang masuk dihitung sebagai uang masuk lain, bukan pendapatan aplikasi |
+| Biaya admin | Selisih jumlah pada pasangan dicatat sebagai pengeluaran "Biaya admin & transfer" |
+| Server (`recompute` di `server.py`) | Setiap sinkron e-wallet, unggah atau hapus e statement, dan hapus e-wallet, semua akun pengguna dihitung ulang bersama. Respons membawa ringkasan akun lain yang ikut berubah, dan halaman onboarding memperbaruinya |
+| Simulasi (`openfinance/mock.py`) | Tarik saldo dan top up dompet kini punya jadwal tetap per dompet, dan rekening bank simulasi membuat pasangannya ("Transfer masuk dari GoPay", "Top up OVO 08xx") untuk dompet yang terhubung. Saat dompet baru dihubungkan, rekening bank simulasi dibuat ulang supaya pasangannya ikut ada |
+| Data contoh (`public/demo-data.json`) | Dibuat ulang dengan aturan baru. Mode demo statis (tanpa server) tidak bisa memasangkan, jadi tarik saldo di sana tercatat sebagai pengeluaran |
+
+Kenapa ada batas hari: antar e-wallet biasanya masuk di hari yang sama, paling lambat besoknya kalau lewat tengah malam. Transfer ke atau dari bank bisa baru tercatat hari kerja berikutnya, misalnya lewat akhir pekan, jadi diberi 3 hari. Tanpa batas, dua transaksi yang kebetulan sama jumlahnya tapi berjarak berminggu minggu bisa salah dipasangkan.
+
+Diuji lewat server: GoPay saja, tarik saldo Rp906 rb tercatat sebagai pengeluaran "Ke rekening atau dompet lain". Setelah rekening bank terhubung, semuanya berpasangan (GoPay keluar Rp906 rb, bank masuk Rp901 rb, admin Rp5 rb), dan ringkasan GoPay di onboarding ikut turun tanpa sinkron ulang. Setelah OVO ditambah, pasangan OVO ikut muncul di rekening bank. Hapus rekening bank mengembalikan tarik saldo GoPay dan OVO jadi pengeluaran. Tidak ada galat di konsol.
+
+## U. Revisi 5 Nov (Grace, branch dickson): nomor HP tiap e-wallet
+
+| Bagian | Perubahan |
+|---|---|
+| Izin data | Setelah memilih "Hubungkan e-wallet", muncul kartu "Nomor HP tiap e-wallet" untuk setiap e-wallet yang dipilih di Profil. Isinya diambil dari nomor akun Laju dan bisa diganti. Wajib minimal 9 digit untuk lanjut (`walletPhoneCard`, `S.consent.walletPhones`) |
+| Menghubungkan | Nomor dikirim ke halaman penyedia, jadi pengguna langsung masuk ke langkah OTP. Masih bisa "Ganti nomor" di sana |
+| Pengecekan nomor | Nomor akun yang benar benar terhubung (dikembalikan penyedia) harus sama dengan isian Izin data. Kalau beda, penghubungan dibatalkan dan muncul pesan "Nomor OVO yang dihubungkan (akhiran 8888) beda dengan nomor yang Anda isi di Izin data". Kalau penyedia tidak mengembalikan nomor, pengecekan dilewati |
+| Pindahan antar akun (`pair_transfers`) | Nomor terverifikasi dipakai lebih dulu. Keterangan yang menyebut nomor lengkap milik akun terdaftar, termasuk di dalam nomor virtual account top up (kode bank + nomor HP), langsung dianggap pindahan sendiri. Keterangan yang menyebut nomor lengkap milik orang lain tidak pernah dianggap pindahan, walaupun jumlah dan tanggalnya kebetulan cocok. Nomor yang disamarkan (0812****7890) hanya boleh dipasangkan kalau tidak bertentangan dengan nomor akun. Tanpa nomor, aturan pasangan di bagian T tetap berlaku |
+| Simulasi | Top up dari rekening ke e-wallet kini tertulis dengan nomor VA lengkap, nomor disamarkan, atau tanpa nomor. Ada juga top up sesekali ke OVO orang lain. Contoh e statement (Pakai contoh) kini memuat sisi rekening dari tarik saldo dan top up di e-wallet yang terhubung, supaya pencocokan bisa didemokan lewat layar |
+| Mode contoh tanpa server | Nomor ikut terisi di halaman penyedia dan nomor yang beda juga ditolak |
+
+Diuji lewat server dan browser, ID dan EN: nomor GoPay dan OVO terisi dari nomor akun; halaman penyedia langsung ke OTP; OVO dihubungkan dengan nomor lain ditolak dengan pesan di atas. Uji pasangan: top up ke OVO bernomor orang lain dengan jumlah dan tanggal sama persis dengan top up masuk di OVO pengguna tetap dihitung pengeluaran; top up ke nomor OVO pengguna tanpa pasangan tetap dianggap pindahan; nomor samar yang tidak cocok tidak dipasangkan. Contoh e statement SeaBank setelah GoPay dan OVO terhubung: transfer masuk dan top up berpasangan, top up ke OVO orang lain tetap tercatat "Ke rekening atau dompet lain".
+
+## V. Perbaikan 5 Nov (Grace, branch dickson): e statement lama muncul lagi setelah reset
+
+Gejala: setelah mencoba e statement Jago lalu reset total, kartu Jago muncul lagi di langkah E-wallet walaupun Jago tidak dipilih di Profil, dan angkanya ikut terhitung.
+
+| Penyebab | Perbaikan |
+|---|---|
+| Reset menghapus data di server lewat `/api/wallets/<id>`. Untuk e statement (id `c:Jago`) alamat itu tidak dikenal server, jadi e statement tetap tersimpan dan terbaca lagi setelah reset | Server punya `DELETE /api/wallets` yang menghapus semua e-wallet dan e statement pengguna sekaligus, dan tombol reset memakainya (`muat-ulang.js`) |
+| "Isi contoh" memasukkan semua akun yang ada, termasuk e statement sisa, ke pilihan dompet di Profil tanpa terlihat sebagai pilihan | Hanya e-wallet bawaan yang ikut dipilih. Data lama dibersihkan saat dibuka: dompet buatan sendiri hanya terpilih kalau namanya ada di daftar opsi |
+| E statement di server yang tidak dikenal perangkat ini tetap dipakai | Dianggap sisa data lama, lalu dihapus dari server dan tidak dihitung (`mergeServerWallets`) |
+| Menghapus dompet buatan sendiri (×) atau membatalkan pilihannya tidak menghapus e statement-nya di server, dan "Isi manual" ikut memanggil alamat yang salah | Semua penghapusan memakai `dropRemote`, yang memilih alamat yang benar untuk e-wallet dan e statement. Memilih "Isi manual" hanya memutus e-wallet, e statement tetap dipakai di langkah Dokumen |
+
+Diuji di browser: e statement Jago dibuat, reset, server kosong. E statement yang tertinggal di server tanpa ada di perangkat dihapus saat onboarding dibuka. Pilihan `c:Jago` tanpa opsi Jago dibuang. Hapus opsi Jago (×) menghapus e statement-nya di perangkat dan di server. Tidak ada galat di konsol.

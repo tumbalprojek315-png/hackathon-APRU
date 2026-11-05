@@ -63,11 +63,14 @@ class LiveProvider(Provider):
             raise ProviderError("Tidak bisa menghubungi penyedia open finance.", "unreachable") from e
 
     # ------------------------------------------------------- 4 metode wajib
-    def create_link_session(self, user_id: str, wallet_id: str, callback_url: str) -> LinkSession:
+    def create_link_session(self, user_id: str, wallet_id: str, callback_url: str, phone: str = "") -> LinkSession:
         # TODO(penyedia): 1) minta token aplikasi dengan client id/secret,
         # 2) buat sesi/widget penghubungan untuk `wallet_id`, daftarkan
         #    `callback_url` sebagai redirect URI,
         # 3) kembalikan LinkSession(session_id, wallet_id, <url widget penyedia>).
+        #    Kirim `phone` sebagai isian awal nomor HP kalau penyedia mendukung.
+        # exchange(): taruh nomor HP akun yang terhubung di LinkedAccount.extra["phone"] supaya Laju bisa
+        #    mencocokkannya dengan nomor yang diisi pengguna.
         raise NotImplementedError("Isi dengan endpoint pembuatan sesi dari dokumentasi penyedia.")
 
     def exchange(self, session_id: str, params: dict) -> LinkedAccount:

@@ -74,11 +74,10 @@
   ];
   // Tujuan dibagi dua kelompok. Wajib = punya tenggat yang tidak bisa digeser, atau melindungi
   // dan menambah penghasilan. Selain itu tumbuh. Wajib mulai di Step 3, tumbuh mulai di Step 5.
+  // Kelompoknya hanya dipakai di hitungan, tidak ditampilkan sebagai label di pilihan tujuan.
+  // Modal menikah dan kendaraan untuk kerja dihapus dari pilihan (5 Nov); data lama dibersihkan di migrate.
   const GOALS = [
     { id: "pendidikan", label: "Biaya pendidikan awal", group: "wajib" },
-    { id: "nikah_tanggal", label: "Modal menikah, tanggal sudah ditentukan", group: "wajib" },
-    { id: "kendaraan_kerja", label: "Kendaraan untuk kerja", group: "wajib" },
-    { id: "nikah", label: "Modal menikah, tanggal belum ada", group: "tumbuh" },
     { id: "kendaraan", label: "Kendaraan pribadi", group: "tumbuh" },
     { id: "usaha", label: "Modal usaha sampingan", group: "tumbuh" },
     { id: "rumah", label: "Beli rumah", group: "tumbuh" },
@@ -159,7 +158,7 @@
       hasInsurance: false, recordsIncome: "",
     },
     // Dua jalur yang saling meniadakan: useWallet true = lewat e-wallet, false = isi manual, null = belum memilih.
-    consent: { useWallet: null, useManual: true, agreeTerms: false, agreeDataUse: false },
+    consent: { useWallet: null, useManual: true, agreeTerms: false, agreeDataUse: false, walletPhones: {} },   // walletPhones: nomor HP per e-wallet (Izin data)
     autofill: null,            // catatan kapan kolom diisi otomatis dari transaksi, supaya tidak menimpa hasil edit
     wallets: [],
     income: { perPlatform: {}, bonus: 0, tips: 0, other: 0, weekAvg: 0, best: 0, worst: 0 },
@@ -221,6 +220,8 @@
     }
     // tunai dan rekening bank tidak lagi jadi pilihan jalur uang
     if (Array.isArray(s.profile.channels)) s.profile.channels = s.profile.channels.filter(c => c !== "tunai" && c !== "bank");
+    // dompet buatan sendiri hanya terpilih kalau namanya ada di daftar opsi (dulu "Isi contoh" bisa menambahkannya diam diam)
+    if (Array.isArray(s.profile.channels)) s.profile.channels = s.profile.channels.filter(c => !String(c).startsWith("c:") || (s.profile.customChannels || []).includes(String(c).slice(2)));
     delete s.profile.hasBank;
     // BPJS tidak lagi diukur
     delete s.profile.hasBpjsKes; delete s.profile.hasBpjsKet;
@@ -288,6 +289,7 @@
   const isLoggedIn = () => { try { return localStorage.getItem(LOGIN_KEY) === "1"; } catch (e) { return true; } };
   const setLoggedIn = (on) => { try { if (on) localStorage.setItem(LOGIN_KEY, "1"); else localStorage.removeItem(LOGIN_KEY); } catch (e) { /* abaikan */ } };
   const phoneDigits = (s) => String(s || "").replace(/\D/g, "").replace(/^62/, "0");
+  const maskPhone = (s) => { const d = phoneDigits(s); return d.length >= 8 ? `${d.slice(0, 4)}****${d.slice(-4)}` : "-"; };
   const needsLogin = () => S.finished && !!S.account.pass && !isLoggedIn();
   const esc = (v) => String(v ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
   const fmt = (n) => Math.round(n || 0).toLocaleString("id-ID");
@@ -634,7 +636,7 @@
       const high = c.items.filter(i => i.reason === "tinggi" && (i.status === "part" || i.status === "none"));
       if (high.length) out.push({ lv: "warn", step: high[0].step, text: `Turunkan perkiraan: ${names(high)}.` });
       const open = c.items.filter(i => (i.status === "part" || i.status === "none") && !i.reason && i.gap >= 50000);
-      if (open.length) out.push({ lv: "info", step: open[0].step, text: `${open.length} selisih belum dijelaskan.` });
+      // "N selisih belum dijelaskan" dihapus (5 Nov): pertanyaan "sisa lewat mana?" tidak ditampilkan lagi.
       // uang di luar e-wallet harus ada asalnya
       if (ov.expense == null && ov.income == null) {
         const g = (grp) => c.items.filter(i => i.group === grp && (i.status === "part" || i.status === "none") && i.reason !== "tinggi").reduce((s, i) => s + i.gap, 0);
@@ -652,6 +654,12 @@
   // Server prototipe menyimpan izin e-wallet di memori: setelah server dimulai ulang daftarnya kosong.
   // Ringkasan yang sudah tersinkron tetap dipakai (ditandai "stale") supaya angka tidak berubah diam-diam.
   function mergeServerWallets(server) {
+    // E statement di server yang tidak dikenal perangkat ini adalah sisa data lama (mis. setelah reset): dihapus,
+    // supaya tidak ikut terhitung diam diam. E statement selalu tersimpan di perangkat begitu diunggah.
+    const known = new Set(S.wallets.map(w => w.walletId));
+    const orphan = server.filter(w => w.source === "statement" && !known.has(w.walletId));
+    orphan.forEach(w => dropRemote(w.walletId).catch(() => {}));
+    server = server.filter(w => !orphan.includes(w));
     const lost = S.wallets.filter(w => w.summary && !server.some(x => x.walletId === w.walletId));
     return { wallets: [...server.map(w => ({ ...w, stale: false })), ...lost.map(w => ({ ...w, stale: true }))], lost };
   }
@@ -1002,6 +1010,8 @@
 
   // ---------- Server API ----------
   let apiOffline = false;
+  // Hapus satu akun di server. E statement (id "c:Nama") punya endpoint sendiri.
+  const dropRemote = (id) => api(String(id).startsWith("c:") ? `/api/statements?name=${encodeURIComponent(String(id).slice(2))}` : `/api/wallets/${id}`, { method: "DELETE" });
   async function api(path, { method = "GET", body } = {}) {
     // Sudah terbukti tidak ada server: langsung ke mode contoh, supaya tidak memanggil /api yang pasti gagal.
     if (apiOffline && window.LajuDemo) return window.LajuDemo.handle(path, { method, body });

@@ -67,8 +67,9 @@ class Provider(ABC):
     supported_wallets: tuple[str, ...] = ()
 
     @abstractmethod
-    def create_link_session(self, user_id: str, wallet_id: str, callback_url: str) -> LinkSession:
-        """Minta penyedia membuat sesi login, kembalikan URL tujuan pengguna."""
+    def create_link_session(self, user_id: str, wallet_id: str, callback_url: str, phone: str = "") -> LinkSession:
+        """Minta penyedia membuat sesi login, kembalikan URL tujuan pengguna. `phone`: nomor HP yang diisi pengguna
+        di Laju, dikirim supaya halaman penyedia sudah terisi (kalau penyedia mendukung)."""
 
     @abstractmethod
     def exchange(self, session_id: str, params: dict) -> LinkedAccount:

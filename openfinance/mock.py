@@ -50,6 +50,45 @@ MONTHLY_BILLS = [
 ]
 
 
+PEER_LABELS = {"gopay": "GoPay", "ovo": "OVO", "dana": "DANA", "shopeepay": "ShopeePay", "linkaja": "LinkAja"}
+# Kode awalan virtual account top up (contoh untuk simulasi). Nomor VA = kode + nomor HP akun e-wallet tujuan.
+VA_PREFIX = {"gopay": "70001", "ovo": "39358", "dana": "3901", "shopeepay": "122", "linkaja": "09110"}
+OTHER_PHONE = "081398765432"   # nomor e-wallet milik orang lain, untuk contoh top up ke dompet orang
+
+
+def mask(phone: str) -> str:
+    d = "".join(ch for ch in phone if ch.isdigit())
+    return f"{d[:4]}****{d[-4:]}" if len(d) >= 8 else "08**********"
+
+
+def topup_desc(wallet_id: str, phone: str, day: date) -> str:
+    """Keterangan top up dari rekening ke e-wallet. Tetap per (dompet, hari): kadang nomor VA lengkap, kadang nomor
+    disamarkan, kadang tanpa nomor, seperti mutasi bank sungguhan yang formatnya berbeda beda."""
+    label = PEER_LABELS.get(wallet_id, wallet_id)
+    r = random.Random(f"desc:{wallet_id}:{day.toordinal()}").random()
+    if phone and r < 0.5:
+        return f"Top up {label} {VA_PREFIX.get(wallet_id, '')}{phone}"
+    if phone and r < 0.8:
+        return f"Top up {label} {mask(phone)}"
+    return f"Top up {label}"
+
+
+def _transfers(wallet_id: str, day: date) -> list[tuple[str, int, int, int, str]]:
+    """Pindahan dompet <-> rekening BRI pada satu hari, tetap untuk dompet itu (tidak tergantung pengguna).
+    Hasil: (jenis, jumlah di dompet, biaya admin, jeda hari di rekening, keterangan). "tarik" = dompet ke rekening,
+    "topup" = rekening ke dompet. Kira-kira seminggu sekali tarik saldo dan sebulan dua kali top up."""
+    prof = WALLET_PROFILES.get(wallet_id)
+    if not prof or wallet_id == "bank":
+        return []
+    r = random.Random(f"transfer:{wallet_id}:{day.toordinal()}")
+    out = []
+    if prof["payout"] and r.random() < 0.14:
+        out.append(("tarik", int(round(r.uniform(200_000, 500_000), -3)), r.choice([0, 0, 2_500]), r.choice([0, 0, 1]), ""))
+    if r.random() < 0.05 * prof["spend"] + 0.02:
+        out.append(("topup", int(round(r.uniform(50_000, 200_000), -3)), r.choice([0, 1_000]), 0, ""))
+    return out
+
+
 class MockProvider(Provider):
     name = "Simulasi Laju"
     live = False
@@ -59,13 +98,16 @@ class MockProvider(Provider):
         self._sessions: dict[str, dict] = {}
         self._lock = threading.Lock()
 
-    def create_link_session(self, user_id: str, wallet_id: str, callback_url: str) -> LinkSession:
+    def create_link_session(self, user_id: str, wallet_id: str, callback_url: str, phone: str = "") -> LinkSession:
         if wallet_id not in WALLET_PROFILES:
             raise ProviderError("E-wallet ini belum didukung.", "unsupported_wallet", 400)
         sid = secrets.token_urlsafe(12)
         with self._lock:
             self._sessions[sid] = {"user_id": user_id, "wallet_id": wallet_id, "code": "sim-" + secrets.token_urlsafe(8)}
-        query = urlencode({"session": sid, "wallet": wallet_id, "code": self._sessions[sid]["code"], "callback": callback_url})
+        q = {"session": sid, "wallet": wallet_id, "code": self._sessions[sid]["code"], "callback": callback_url}
+        if phone:
+            q["phone"] = phone   # nomor dari Izin data: halaman penyedia tinggal minta OTP
+        query = urlencode(q)
         return LinkSession(sid, wallet_id, f"/simulasi-penyedia.html?{query}")
 
     def exchange(self, session_id: str, params: dict) -> LinkedAccount:
@@ -79,16 +121,21 @@ class MockProvider(Provider):
             raise ProviderError("Izin dibatalkan di halaman penyedia.", "access_denied", 400)
         if params.get("code") != sess["code"]:
             raise ProviderError("Kode verifikasi dari penyedia tidak cocok.", "bad_code", 400)
-        last4 = "".join(ch for ch in params.get("ref", "") if ch.isdigit())[-4:] or "0000"
+        phone = "".join(ch for ch in params.get("ref", "") if ch.isdigit())
+        last4 = phone[-4:] or "0000"
         return LinkedAccount(
             wallet_id=sess["wallet_id"],
             access_token="sim_" + secrets.token_urlsafe(16),
             account_name="Akun simulasi",
-            account_ref=f"08** **** {last4}",
-            extra={"seed": f"{sess['user_id']}:{sess['wallet_id']}:{last4}"},
+            account_ref=mask(phone),
+            # penyedia sungguhan mengembalikan nomor akun yang terhubung; Laju mencocokkannya dengan isian Izin data
+            extra={"seed": f"{sess['user_id']}:{sess['wallet_id']}:{last4}", "phone": phone},
         )
 
-    def fetch_transactions(self, account: LinkedAccount, days: int) -> list[RawTransaction]:
+    def fetch_transactions(self, account: LinkedAccount, days: int, peers: dict | list | tuple = ()) -> list[RawTransaction]:
+        """`peers`: dompet lain milik pengguna yang sama yang sudah terhubung ({id: nomor HP} atau daftar id). Dipakai
+        supaya pindahan antar akun (tarik saldo ke rekening, top up dari rekening) punya pasangan di rekening bank."""
+        peers = peers if isinstance(peers, dict) else {p: "" for p in peers}
         prof = WALLET_PROFILES[account.wallet_id]
         rnd = random.Random(account.extra.get("seed", account.access_token))
         today = date.today()
@@ -114,8 +161,7 @@ class MockProvider(Provider):
                 add(day, rnd.uniform(lo, hi) * intensity, "in", desc)
                 if rnd.random() < 0.15:
                     add(day, rnd.uniform(10_000, 40_000), "in", desc.split(" - ")[0] + " - Bonus insentif harian")
-            if rnd.random() < 0.05 * prof["spend"]:
-                add(day, rnd.uniform(50_000, 200_000), "in", "Top up saldo dari BRI")
+
             if rnd.random() < 0.03:
                 add(day, rnd.uniform(50_000, 300_000), "in", "Transfer dari RAHMAT HIDAYAT")
             for desc, (lo, hi), p in SPEND_TEMPLATES:
@@ -129,8 +175,30 @@ class MockProvider(Provider):
                 add(day, rnd.uniform(20_000, 150_000), "out", f"Pembayaran QRIS NMID ID{rnd.randrange(10**9, 10**10)}")
             if rnd.random() < 0.01:
                 add(day, rnd.uniform(100_000, 500_000), "in", f"Dana masuk REF{rnd.randrange(10**6, 10**7)}")
-            if prof["payout"] and i % 7 == 3 and rnd.random() < 0.5:
-                add(day, rnd.uniform(200_000, 500_000), "out", "Tarik saldo ke rekening BRI")
+            # pindahan dengan rekening bank: jadwalnya tetap per dompet, jadi rekening bank bisa membuat pasangannya
+            if account.wallet_id != "bank":
+                for kind, amt, _, _, _ in _transfers(account.wallet_id, day):
+                    if kind == "tarik":
+                        add(day, amt, "out", "Tarik saldo ke rekening BRI")
+                    else:
+                        add(day, amt, "in", "Top up saldo dari BRI")
+            else:
+                for peer in peers:
+                    if peer == "bank" or peer not in WALLET_PROFILES:
+                        continue
+                    label = PEER_LABELS.get(peer, peer)
+                    # pasangan untuk transaksi dompet di hari ini (masuk hari yang sama atau besoknya)
+                    for src_day in (day, day - timedelta(days=1)):
+                        for kind, amt, fee, lag, _ in _transfers(peer, src_day):
+                            if (day - src_day).days != lag:
+                                continue
+                            if kind == "tarik":
+                                add(day, amt - fee, "in", f"Transfer masuk dari {label}")
+                            else:
+                                add(day, amt + fee, "out", topup_desc(peer, peers[peer], src_day))
+                # sesekali top up ke e-wallet orang lain (nomornya bukan milik pengguna): tetap pengeluaran
+                if peers and random.Random(f"other:{day.toordinal()}").random() < 0.06:
+                    add(day, rnd.uniform(50_000, 150_000), "out", f"Top up OVO {VA_PREFIX['ovo']}{OTHER_PHONE}")
 
         return txs
 

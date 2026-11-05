@@ -16,13 +16,13 @@ import os
 import re
 import secrets
 import threading
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from http import cookies
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlencode, urlparse
 
-from openfinance import CATEGORY_LABELS, PLATFORM_LABELS, ProviderError, get_provider, history, summarize
+from openfinance import CATEGORY_LABELS, PLATFORM_LABELS, ProviderError, get_provider, history, pair_transfers, phone_core, summarize
 from openfinance import statement as stmt
 
 ROOT = Path(__file__).resolve().parent
@@ -37,7 +37,7 @@ RECENT_LIMIT = 40
 provider = get_provider()
 _lock = threading.Lock()
 _users: dict[str, dict] = {}      # uid -> {"wallets": {wallet_id: record}}
-_sessions: dict[str, str] = {}     # session_id -> uid
+_sessions: dict[str, tuple[str, str]] = {}     # session_id -> (uid, nomor HP yang diisi di Izin data)
 
 
 def now_iso() -> str:
@@ -74,16 +74,59 @@ def statement_view(name: str, rec: dict) -> dict:
     }
 
 
-def recalc_statement(rec: dict) -> None:
+def recalc_statement(rec: dict, overrides: dict | None = None) -> None:
     """Hitung ulang ringkasan dari transaksi yang tersimpan. Periode diambil dari isi dokumen,
     bukan dari tanggal hari ini, supaya mutasi bulan lalu tetap terbaca utuh."""
     raw = rec["transactions"]
     days = sorted(t.date[:10] for t in raw)
     first, last = date.fromisoformat(days[0]), date.fromisoformat(days[-1])
     span = max(1, (last - first).days + 1)
-    summary, items = summarize(raw, span, today=last)
-    summary["history"] = history(raw, today=last)
+    summary, items = summarize(raw, span, today=last, overrides=overrides)
+    summary["history"] = history(raw, today=last, overrides=overrides)
     rec.update(summary=summary, recent=items[:RECENT_LIMIT], **{"from": days[0], "to": days[-1]})
+
+
+def recompute(user: dict) -> None:
+    """Semua akun terdaftar satu pengguna dihitung bersama: pindahan antar akun sendiri yang pasangannya ketemu
+    tidak dihitung dua kali (lihat openfinance.categorize.pair_transfers). Dipanggil setiap ada akun yang
+    disinkron, diunggah, atau dihapus, karena pasangan di akun lain bisa ikut berubah."""
+    wallets = {wid: r for wid, r in user.get("wallets", {}).items() if r.get("raw") is not None}
+    stmts = user.get("statements", {})
+    accounts = {wid: r["raw"] for wid, r in wallets.items()}
+    accounts.update({"c:" + n: r["transactions"] for n, r in stmts.items() if r.get("transactions")})
+    numbers = {wid: r.get("phone", "") for wid, r in wallets.items()}   # nomor terverifikasi saat penghubungan
+    ov = pair_transfers(accounts, numbers)
+    for r in wallets.values():
+        summary, items = summarize(r["raw"], PERIOD_DAYS, overrides=ov)
+        summary["history"] = history(r["raw"], overrides=ov)
+        r.update(summary=summary, recent=items[:RECENT_LIMIT])
+    for r in stmts.values():
+        if r.get("transactions"):
+            recalc_statement(r, ov)
+
+
+def sample_mirror(user: dict) -> list[tuple[str, str, int]]:
+    """Contoh e statement (simulasi) ikut memuat sisi rekening dari tarik saldo dan top up di e-wallet terhubung,
+    supaya pencocokan pindahan antar akun bisa didemokan. Hasil: [(tanggal ISO, keterangan, jumlah +masuk/-keluar)]."""
+    from openfinance.mock import OTHER_PHONE, PEER_LABELS, VA_PREFIX, topup_desc
+    rows = []
+    for wid, r in user.get("wallets", {}).items():
+        for t in r.get("raw") or []:
+            d, low = date.fromisoformat(t.date[:10]), t.description.lower()
+            h = sum(map(ord, t.id))
+            if t.direction == "out" and low.startswith("tarik saldo"):
+                rows.append((min(d + timedelta(days=h % 2), date.today()).isoformat(), f"Transfer masuk dari {PEER_LABELS.get(wid, wid)}", t.amount - (2_500 if h % 3 == 0 else 0)))
+            elif t.direction == "in" and low.startswith("top up saldo dari"):
+                rows.append((d.isoformat(), topup_desc(wid, r.get("phone", ""), d), -(t.amount + (1_000 if h % 2 else 0))))
+    if rows:   # top up ke e-wallet orang lain: nomornya bukan milik pengguna, jadi tetap pengeluaran
+        last = max(x[0] for x in rows)
+        rows.append((last, f"Top up OVO {VA_PREFIX['ovo']}{OTHER_PHONE}", -75_000))
+    return rows
+
+
+def all_views(user: dict) -> list[dict]:
+    return ([public_view(r) for r in user.get("wallets", {}).values()]
+            + [statement_view(n, r) for n, r in user.get("statements", {}).items() if r.get("summary")])
 
 
 class Handler(SimpleHTTPRequestHandler):
@@ -185,11 +228,8 @@ class Handler(SimpleHTTPRequestHandler):
             }, uid=uid)
         if url.path == "/api/wallets":
             with _lock:
-                u = _users.get(uid[0], {})
-                recs = list(u.get("wallets", {}).values())
-                stmts = [(n, r) for n, r in u.get("statements", {}).items() if r.get("summary")]
-            return self._send(200, {"wallets": [public_view(r) for r in recs]
-                                    + [statement_view(n, r) for n, r in stmts]}, uid=uid)
+                views = all_views(_users.get(uid[0], {}))
+            return self._send(200, {"wallets": views}, uid=uid)
         if url.path == "/api/wallets/callback":
             return self._callback(parse_qs(url.query), uid)
         return self._error(404, "not_found", "Alamat API tidak dikenal.", uid)
@@ -209,16 +249,19 @@ class Handler(SimpleHTTPRequestHandler):
 
         if url.path == "/api/wallets/link":
             wallet_id = str(body.get("walletId", ""))
+            phone = re.sub(r"\D", "", str(body.get("phone", "")))[:15]
+            if phone and len(phone) < 9:
+                return self._error(400, "bad_phone", "Nomor HP minimal 9 digit.", uid)
             if wallet_id not in provider.supported_wallets:
                 return self._error(400, "unsupported_wallet", "E-wallet ini belum didukung penyedia.", uid)
             try:
-                sess = provider.create_link_session(uid[0], wallet_id, self._base_url() + "/api/wallets/callback")
+                sess = provider.create_link_session(uid[0], wallet_id, self._base_url() + "/api/wallets/callback", phone=phone)
             except ProviderError as e:
                 return self._error(e.status, e.code, str(e), uid)
             except NotImplementedError:
                 return self._error(501, "not_implemented", "Integrasi penyedia asli belum diisi (openfinance/live.py).", uid)
             with _lock:
-                _sessions[sess.session_id] = uid[0]
+                _sessions[sess.session_id] = (uid[0], phone)
             return self._send(200, {"redirectUrl": sess.redirect_url}, uid=uid)
 
         m = re.fullmatch(r"/api/wallets/([a-z]+)/sync", url.path)
@@ -234,26 +277,41 @@ class Handler(SimpleHTTPRequestHandler):
         if url.path == "/api/statements":
             name = (parse_qs(url.query).get("name") or [""])[0]
             with _lock:
-                _users.get(uid[0], {}).get("statements", {}).pop(name, None)
-            return self._send(200, {"ok": True}, uid=uid)
+                user = _users.get(uid[0], {})
+                user.get("statements", {}).pop(name, None)
+                recompute(user)
+                views = all_views(user)
+            return self._send(200, {"ok": True, "wallets": views}, uid=uid)
+        if url.path == "/api/wallets":   # reset: semua e-wallet dan e statement pengguna ini dihapus
+            with _lock:
+                user = _users.pop(uid[0], {})
+            for rec in user.get("wallets", {}).values():
+                try:
+                    provider.revoke(rec["account"])
+                except (ProviderError, NotImplementedError) as e:
+                    print("revoke gagal:", e)
+            return self._send(200, {"ok": True, "wallets": []}, uid=uid)
         m = re.fullmatch(r"/api/wallets/([a-z]+)", url.path)
         if not m:
             return self._error(404, "not_found", "Alamat API tidak dikenal.", uid)
         with _lock:
-            rec = _users.get(uid[0], {}).get("wallets", {}).pop(m.group(1), None)
+            user = _users.get(uid[0], {})
+            rec = user.get("wallets", {}).pop(m.group(1), None)
+            recompute(user)
+            views = all_views(user)
         if rec:
             try:
                 provider.revoke(rec["account"])
             except (ProviderError, NotImplementedError) as e:
                 print("revoke gagal:", e)
-        return self._send(200, {"ok": True}, uid=uid)
+        return self._send(200, {"ok": True, "wallets": views}, uid=uid)
 
     # ---------------------------------------------------------------- actions
     def _callback(self, q: dict, uid):
         params = {k: v[0] for k, v in q.items()}
         sid = params.get("session", "")
         with _lock:
-            owner = _sessions.pop(sid, None)
+            owner, expected = _sessions.pop(sid, (None, ""))
 
         def back(**kw):
             return self._send(302, location="/onboarding.html?" + urlencode(kw), uid=uid)
@@ -266,9 +324,18 @@ class Handler(SimpleHTTPRequestHandler):
             return back(link="error", reason=e.code, wallet=params.get("wallet", ""))
         except NotImplementedError:
             return back(link="error", reason="not_implemented")
+        # Nomor akun yang benar benar terhubung harus sama dengan nomor yang diisi di Izin data. Kalau penyedia
+        # tidak mengembalikan nomor, pengecekan ini dilewati dan nomornya tidak dipakai untuk mencocokkan pindahan.
+        got = account.extra.get("phone", "")
+        if expected and got and phone_core(got) != phone_core(expected):
+            try:
+                provider.revoke(account)
+            except (ProviderError, NotImplementedError):
+                pass
+            return back(link="error", reason="phone_mismatch", wallet=account.wallet_id, got=got[-4:])
         with _lock:
             _users.setdefault(owner, {"wallets": {}})["wallets"][account.wallet_id] = {
-                "account": account, "linked_at": now_iso(),
+                "account": account, "linked_at": now_iso(), "phone": got,
             }
         return back(link="ok", wallet=account.wallet_id)
 
@@ -277,23 +344,43 @@ class Handler(SimpleHTTPRequestHandler):
             rec = _users.get(uid[0], {}).get("wallets", {}).get(wallet_id)
         if not rec:
             return self._error(404, "not_linked", "E-wallet ini belum terhubung atau izinnya sudah berakhir. Hubungkan lagi.", uid)
+        with _lock:
+            peers = {w: r.get("phone", "") for w, r in _users.get(uid[0], {}).get("wallets", {}).items() if w != wallet_id}
         try:
-            raw = provider.fetch_transactions(rec["account"], HISTORY_DAYS)
+            # mode simulasi: penyedia tahu dompet lain yang terhubung, supaya pindahan antar akun punya pasangan
+            raw = (provider.fetch_transactions(rec["account"], HISTORY_DAYS, peers=peers) if not provider.live
+                   else provider.fetch_transactions(rec["account"], HISTORY_DAYS))
         except ProviderError as e:
             return self._error(e.status, e.code, str(e), uid)
         except NotImplementedError:
             return self._error(501, "not_implemented", "Integrasi penyedia asli belum diisi (openfinance/live.py).", uid)
-        summary, items = summarize(raw, PERIOD_DAYS)
-        summary["history"] = history(raw)
         with _lock:
-            rec.update(summary=summary, recent=items[:RECENT_LIMIT], synced_at=now_iso())
-        return self._send(200, public_view(rec), uid=uid)
+            user = _users[uid[0]]
+            rec.update(raw=raw, synced_at=now_iso())
+            bank = user["wallets"].get("bank")
+        # mode simulasi: rekening bank dibuat ulang supaya pasangan pindahan dari dompet yang baru terhubung ikut ada
+        if not provider.live and wallet_id != "bank" and bank and bank.get("raw") is not None:
+            try:
+                braw = provider.fetch_transactions(bank["account"], HISTORY_DAYS,
+                                                   peers={w: r.get("phone", "") for w, r in user["wallets"].items() if w != "bank"})
+                with _lock:
+                    bank["raw"] = braw
+            except ProviderError:
+                pass
+        with _lock:
+            recompute(user)
+            others = [v for v in all_views(user) if v["walletId"] != wallet_id]
+        # `others`: ringkasan akun lain ikut berubah kalau ada pindahan antar akun sendiri
+        return self._send(200, {**public_view(rec), "others": others}, uid=uid)
 
     def _statement(self, sample: bool, body: dict, uid):
         """Unggah PDF mutasi (atau buat contoh saat simulasi). Unggahan berikutnya menambah riwayat."""
         name = re.sub(r"[^\w .-]", "", str(body.get("name", ""))).strip()[:40] or "Rekening"
         if sample:
-            lines = stmt.sample_lines(name, seed=uid[0] + name, mirror=[], platform_label="Gojek")
+            with _lock:
+                user = _users.get(uid[0], {})
+                mirror = sample_mirror(user) if not user.get("statements") else []
+            lines = stmt.sample_lines(name, seed=uid[0] + name, mirror=mirror, platform_label="Gojek")
             data, filename = stmt.build_pdf(name, lines), f"contoh-{name.lower()}.pdf"
         else:
             try:
@@ -315,8 +402,10 @@ class Handler(SimpleHTTPRequestHandler):
                 rec = store[name] = {"transactions": info["transactions"], "filename": filename, "uploaded_at": now_iso()}
             if info.get("balance") is not None:
                 rec["balance"] = info["balance"]
-            recalc_statement(rec)
-        return self._send(200, statement_view(name, rec), uid=uid)
+            user = _users[uid[0]]
+            recompute(user)
+            others = [v for v in all_views(user) if v["walletId"] != "c:" + name]
+        return self._send(200, {**statement_view(name, rec), "others": others}, uid=uid)
 
 
 if __name__ == "__main__":

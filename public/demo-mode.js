@@ -56,7 +56,8 @@
     if (method === "POST" && p === "/api/wallets/link") {
       const id = String(body?.walletId || "");
       if (!data.wallets[id]) fail("unsupported_wallet", "E-wallet ini belum didukung di mode contoh.");
-      return { redirectUrl: `simulasi-penyedia.html?demo=1&wallet=${encodeURIComponent(id)}` };
+      const phone = String(body?.phone || "").replace(/\D/g, "");
+      return { redirectUrl: `simulasi-penyedia.html?demo=1&wallet=${encodeURIComponent(id)}${phone ? `&phone=${phone}` : ""}` };
     }
 
     let m = p.match(/^\/api\/wallets\/([a-z]+)\/sync$/);

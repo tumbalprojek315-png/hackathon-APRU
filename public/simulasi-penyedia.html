@@ -53,6 +53,7 @@
       </form>
 
       <form id="otpForm" hidden novalidate>
+        <p class="muted" id="otpTo" hidden></p>
         <label for="otp">Kode OTP</label>
         <input id="otp" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="6 digit" aria-describedby="otpHint otpErr">
         <p class="hint" id="otpHint">Simulasi: kode OTP selalu <strong>123456</strong>. Di versi asli, kode dikirim lewat SMS/WhatsApp oleh e-wallet.</p>
@@ -82,6 +83,8 @@
       }
       const finish = (extra) => {
         if (demo) {
+          // mode contoh: nomor yang dihubungkan harus sama dengan isian Izin data, seperti di server
+          if (!extra.error && pre.length >= 9 && extra.ref !== pre) extra = { error: "phone_mismatch", got: extra.ref.slice(-4) };
           const ok = !extra.error;
           if (ok) {   // mode contoh menyimpan sendiri daftar dompet yang terhubung
             try {
@@ -91,7 +94,7 @@
             } catch (e) { /* abaikan */ }
           }
           const p = new URLSearchParams(ok ? { link: "ok", wallet: q.get("wallet") || "" }
-            : { link: "error", reason: extra.error, wallet: q.get("wallet") || "" });
+            : { link: "error", reason: extra.error, wallet: q.get("wallet") || "", ...(extra.got ? { got: extra.got } : {}) });
           location.replace("onboarding.html?" + p.toString());
           return;
         }
@@ -126,8 +129,24 @@
           return;
         }
         if (e.submitter) { e.submitter.disabled = true; e.submitter.textContent = "Memproses…"; }
-        finish({ code: q.get("code") || "", ref: phone.slice(-4) });
+        finish({ code: q.get("code") || "", ref: phone });
       });
+      // Nomor sudah diisi di Laju (Izin data): langsung ke OTP, tetap bisa ganti nomor.
+      const pre = (q.get("phone") || "").replace(/\D/g, "");
+      if (pre.length >= 9) {
+        phone = pre;
+        document.getElementById("phone").value = pre;
+        const to = document.getElementById("otpTo");
+        to.innerHTML = `Kode OTP dikirim ke <strong>${pre.slice(0, 4)}****${pre.slice(-4)}</strong>. <a href="#" id="chgPhone">Ganti nomor</a>`;
+        to.hidden = false;
+        document.getElementById("phoneForm").hidden = true;
+        document.getElementById("otpForm").hidden = false;
+        document.getElementById("chgPhone").addEventListener("click", (e) => {
+          e.preventDefault(); to.hidden = true;
+          document.getElementById("otpForm").hidden = true; document.getElementById("phoneForm").hidden = false;
+          document.getElementById("phone").focus();
+        });
+      }
     })();
   </script>
 </body>

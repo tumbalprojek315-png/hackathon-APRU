@@ -99,7 +99,13 @@
     if (key === "platform") { S.profile.platforms = S.profile.platforms.filter(x => x !== id); delete S.income.perPlatform[id]; }
     if (key === "side") S.profile.sideJobs = S.profile.sideJobs.filter(x => x !== id);
     if (key === "place") S.resilience.places = S.resilience.places.filter(x => x !== id);
-    if (key === "channel") S.profile.channels = S.profile.channels.filter(x => x !== id);
+    if (key === "channel") {
+      S.profile.channels = S.profile.channels.filter(x => x !== id);
+      if (S.wallets.some(w => w.walletId === id)) {   // e statement dompet itu ikut dihapus
+        dropRemote(id).then(afterDelete).catch(() => {});
+        S.wallets = S.wallets.filter(w => w.walletId !== id);
+      }
+    }
     if (key === "debt") S.debts.forEach(d => { if (d.type === id) d.type = ""; });
     save(); render(true); toast(`Opsi "${name}" dihapus`);
   }
@@ -137,7 +143,10 @@
         break;
       case "izin":
         if (c.useWallet == null) errs.x = "Pilih apakah Anda mau menghubungkan e-wallet.";
-        else if (!c.agreeTerms || !c.agreeDataUse) errs.x = "Centang kedua persetujuan untuk lanjut.";
+        else if (c.useWallet && walletProgress().chosen.some(id => phoneDigits(walletPhone(id)).length < 9)) {
+          const id = walletProgress().chosen.find(id => phoneDigits(walletPhone(id)).length < 9);
+          errs.x = `Isi nomor HP ${channelLabel(id)} (minimal 9 digit).`;
+        } else if (!c.agreeTerms || !c.agreeDataUse) errs.x = "Centang kedua persetujuan untuk lanjut.";
         break;
       case "ewallet":
         if (!S.consent.useWallet) break;   // jalur manual: langkah Dokumen boleh dilewati
@@ -235,7 +244,7 @@
       card("Uang & rekening", "", `
         <div class="field"><span class="lbl">Uang Anda biasanya masuk & keluar lewat mana saja?</span><span class="hint">Boleh pilih beberapa.</span>
           <div class="chips">${CHANNELS.map(ch => chip("profile.channels", ch.id, ch.label)).join("")}${p.customChannels.map(n => customOpt("channel", n)).join("")}${adderToggle("channel")}</div>
-          ${channelSuggest()}${payoutQuestions()}</div>
+          ${payoutQuestions()}</div>
         ${adderRow("channel")}`, "part-uang") +
       card("Proteksi", "", `
         ${[["hasInsurance", "Asuransi lain", "Asuransi kendaraan, jiwa, atau mikro"]]
@@ -262,6 +271,20 @@
   }
 
   // Isian manual selalu dipakai. Di sini pengguna hanya memilih: hubungkan e-wallet atau tidak.
+  // Nomor HP tiap e-wallet: diisi dari nomor akun Laju, bisa diganti. Dikirim ke halaman penyedia supaya pengguna
+  // tinggal memasukkan OTP, dan harus sama dengan nomor yang benar benar terhubung. Nomor ini juga yang dipakai
+  // server untuk mengenali transfer ke dan dari akun sendiri (mis. nomor virtual account top up).
+  const walletPhone = (id) => S.consent.walletPhones?.[id] ?? S.account.phone ?? "";
+  function walletPhoneCard() {
+    const ids = walletProgress().chosen;
+    if (!ids.length) return `<div class="note accent">${ICON.info}<span>Belum ada e-wallet yang dipilih di Profil. <button type="button" class="link-btn inline" data-action="gotoUang">Pilih e-wallet di Profil</button></span></div>`;
+    const wp = (S.consent.walletPhones ||= {});
+    ids.forEach(id => { if (wp[id] == null) wp[id] = S.account.phone || ""; });
+    return card("Nomor HP tiap e-wallet", "Diisi dari nomor akun Laju. Ganti kalau e-wallet itu memakai nomor lain.", `
+      <div class="grid2">${ids.map(id => field(`wp-${id}`, `Nomor ${channelLabel(id)}`, textInput(`consent.walletPhones.${id}`, { id: `wp-${id}`, type: "tel", placeholder: "08xxxxxxxxxx", extra: 'autocomplete="tel" inputmode="tel"' }))).join("")}</div>
+      <div class="note">${ICON.info}<span>Saat menghubungkan, nomor ini sudah terisi di halaman penyedia, jadi Anda tinggal memasukkan OTP. Nomornya harus sama dengan akun yang dihubungkan.</span></div>`);
+  }
+
   R.izin = () => {
     const c = S.consent;
     const box = `<span class="box">${ICON.check}</span>`;
@@ -284,6 +307,7 @@
           [0, "Tanpa bukti transaksi, laporan untuk bank terkunci"],
         ], "Bisa dihubungkan ke e-wallet kapan saja lewat Profil.")}
       </div>
+      ${c.useWallet ? walletPhoneCard() : ""}
       ${card("Persetujuan penggunaan data", "Centang keduanya untuk lanjut.", `
         ${checkbox("consent.agreeTerms", "Saya setuju dengan <strong>Syarat Layanan</strong> Laju dan mengerti Laju bukan pemberi pinjaman.")}
         ${checkbox("consent.agreeDataUse", "Saya izinkan data saya diproses <strong>hanya untuk analisis keuangan pribadi saya</strong>. Data tidak dibagikan ke pihak lain tanpa izin baru dari saya, termasuk ke bank.")}
@@ -325,11 +349,21 @@
   // ---------- Jalur manual: langkah 4 jadi unggah e statement (PDF mutasi) ----------
   const toB64 = (buf) => { const b = new Uint8Array(buf); let out = ""; for (let i = 0; i < b.length; i += 0x8000) out += String.fromCharCode.apply(null, b.subarray(i, i + 0x8000)); return btoa(out); };
   const docName = () => (stepEl.querySelector("#doc-name")?.value || ui.docName || "").trim();
+  // Ringkasan akun lain ikut berubah kalau ada pindahan antar akun sendiri yang pasangannya baru ketemu atau hilang.
+  // Server mengirimnya sebagai `others` (sinkron, unggah) atau `wallets` (hapus). Hanya akun yang sudah ada yang diganti.
+  function applyOthers(views = []) {
+    for (const v of views || []) {
+      const i = S.wallets.findIndex(w => w.walletId === v.walletId);
+      if (i >= 0 && v.summary) S.wallets[i] = { ...v, stale: false };
+    }
+  }
+  const afterDelete = (r) => { applyOthers(r?.wallets); save(); render(true); };
   async function sendStatement(path, body, label) {
     if (ui.docBusy) return;
     ui.docError = ""; ui.docBusy = label; render(true);
     try {
-      const view = await api(path, { method: "POST", body });
+      const { others, ...view } = await api(path, { method: "POST", body });
+      applyOthers(others);
       const i = S.wallets.findIndex(w => w.walletId === view.walletId);
       i >= 0 ? (S.wallets[i] = view) : S.wallets.push(view);
       ui.docName = "";
@@ -478,7 +512,8 @@
         if (file.size > 5e6) throw new Error("Berkas terlalu besar. Maksimal 5 MB.");
         body = { ...body, filename: file.name, data: toB64(await file.arrayBuffer()) };
       }
-      const view = await api(`/api/statements/${kind}`, { method: "POST", body });
+      const { others, ...view } = await api(`/api/statements/${kind}`, { method: "POST", body });
+      applyOthers(others);
       const i = S.wallets.findIndex(w => w.walletId === view.walletId);
       i >= 0 ? (S.wallets[i] = view) : S.wallets.push(view);
       toast(`E statement ${name} terbaca · ${view.summary.txCount} transaksi`);
@@ -616,7 +651,10 @@
   }
 
   // Kotak verifikasi untuk satu item (diperbarui langsung saat isian berubah lewat data-calc="vf-<key>")
-  const vfBox = (c, key) => c.verified ? `<div data-calc="vf-${key}">${verifyLine(c.items.find(i => i.key === key), { interactive: true })}</div>` : "";
+  // Kotak "Sebagian · sisa lewat mana?" (isian lebih besar dari e-wallet) tidak ditampilkan lagi (5 Nov): pertanyaannya
+  // membingungkan driver. Yang tetap tampil: isian lebih kecil dari e-wallet atau belum diisi padahal ada di e-wallet.
+  const vfShown = (i) => (i && (i.status === "part" || i.status === "none") ? null : i);
+  const vfBox = (c, key) => c.verified ? `<div data-calc="vf-${key}">${verifyLine(vfShown(c.items.find(i => i.key === key)), { interactive: true })}</div>` : "";
 
   R.pendapatan = () => {
     const p = S.profile, inc = S.income;
@@ -779,8 +817,8 @@
       ${card("Kalau besok butuh Rp1 juta mendadak?", "", `
         <div class="grid2">${SHOCK.map(s => opt("resilience.shock", s.id, s.label)).join("")}</div>`, "part-awal")}
       ${card("Tujuan keuangan Anda", "", `
-        <div class="field"><span class="lbl">Apa saja yang ingin Anda capai?</span><span class="hint">Bisa pilih beberapa. Tujuan wajib mulai dikejar di Step 3, tujuan tumbuh di Step 5.</span>
-          <div class="grid2">${GOALS.map(g => opt("resilience.goals", g.id, `${g.label} <span class="tag ${g.group === "wajib" ? "warn" : "lime"}">${g.group === "wajib" ? "Wajib" : "Tumbuh"}</span>`, "", true)).join("")}</div></div>
+        <div class="field"><span class="lbl">Apa saja yang ingin Anda capai?</span><span class="hint">Bisa pilih beberapa.</span>
+          <div class="grid2">${GOALS.map(g => opt("resilience.goals", g.id, g.label, "", true)).join("")}</div></div>
         ${r.goals.map(goalFields).join("")}
         <div class="field"><label for="horizon">Target waktu umum: <output class="num" data-out="resilience.horizon">${r.horizon}</output> bulan</label>${range("resilience.horizon", "horizon", 3, 60, 3, "Target waktu dalam bulan")}</div>
         ${goalDeadlineWarning()}
@@ -798,7 +836,7 @@
     const g = GOALS.find(k => k.id === id); if (!g) return "";
     const wajib = g.group === "wajib";
     return `<div class="goal-set">
-      <p class="lbl">${esc(g.label)} <span class="tag ${wajib ? "warn" : "lime"}">${wajib ? "Wajib" : "Tumbuh"}</span></p>
+      <p class="lbl">${esc(g.label)}</p>
       <div class="grid2">
         ${field(`ga-${id}`, "Perlu dana berapa?", money(`resilience.goalData.${id}.amount`, `ga-${id}`), wajib ? "" : "Opsional.")}
         ${field(`gd-${id}`, "Kapan dibutuhkan?", `<button type="button" class="input date-btn" id="gd-${id}" data-date="resilience.goalData.${id}.deadline" aria-haspopup="dialog">${(S.resilience.goalData?.[id]?.deadline) ? `<span class="num">${fmtDate(S.resilience.goalData[id].deadline)}</span>` : '<span class="ph">Pilih tanggal</span>'}${ICON.calendar}</button>`, wajib ? "Tenggat yang tidak bisa digeser." : "Opsional.")}
@@ -931,7 +969,7 @@
       else if (k === "volbox") el.innerHTML = volBox();
       else if (k === "cov-in" || k === "cov-out") el.innerHTML = coverBody(c, k.slice(4));
       else if (k === "debtLine") el.innerHTML = debtLineText(c);
-      else if (k.startsWith("vf-")) el.innerHTML = verifyLine(c.items.find(i => i.key === k.slice(3)), { interactive: true });
+      else if (k.startsWith("vf-")) el.innerHTML = verifyLine(vfShown(c.items.find(i => i.key === k.slice(3))), { interactive: true });
     });
   }
 
@@ -1060,7 +1098,7 @@
         confirmBox({ title: `Hapus ${m.label} dari pilihan?`, body: `${m.label} sudah terhubung. Kalau dihapus dari pilihan, ${m.label} diputus dan data transaksinya dihapus dari Laju.`, ok: "Ya, hapus & putuskan", danger: true })
           .then(ok => {
             if (!ok) return;
-            api(`/api/wallets/${d.val}`, { method: "DELETE" }).catch(() => {});
+            dropRemote(d.val).then(afterDelete).catch(() => {});
             S.wallets = S.wallets.filter(w => w.walletId !== d.val);
             S.profile.channels = S.profile.channels.filter(x => x !== d.val);
             save(); render(true); toast(`${m.label} diputus`);
@@ -1100,7 +1138,7 @@
         confirmBox({ title: `Hapus e statement ${id}?`, body: "Angka dari dokumen ini tidak lagi dipakai. Anda bisa mengunggahnya lagi kapan saja.", ok: "Ya, hapus", danger: true })
           .then(ok => {
             if (!ok) return;
-            api(`/api/statements?name=${encodeURIComponent(id)}`, { method: "DELETE" }).catch(() => {});
+            api(`/api/statements?name=${encodeURIComponent(id)}`, { method: "DELETE" }).then(afterDelete).catch(() => {});
             S.wallets = S.wallets.filter(w => !(w.source === "statement" && w.accountName === id));
             save(); render(true); toast(`E statement ${id} dihapus`);
           });
@@ -1111,7 +1149,7 @@
         confirmBox({ title: `Hapus dokumen ${id}?`, body: "Angka dari dokumen ini tidak lagi dipakai. Isian Anda di langkah berikutnya tidak ikut terhapus.", ok: "Ya, hapus", danger: true })
           .then(ok => {
             if (!ok) return;
-            api(`/api/statements?name=${encodeURIComponent(id)}`, { method: "DELETE" }).catch(() => {});
+            api(`/api/statements?name=${encodeURIComponent(id)}`, { method: "DELETE" }).then(afterDelete).catch(() => {});
             S.wallets = S.wallets.filter(w => !(w.source === "statement" && w.accountName === id));
             save(); render(true); toast(`Dokumen ${id} dihapus`);
           });
@@ -1134,7 +1172,7 @@
         confirmBox({ title: `Putuskan ${m.label}?`, body: "Izin akses dicabut dan data transaksinya dihapus dari Laju. Anda bisa menghubungkan lagi kapan saja.", ok: "Ya, putuskan", danger: true })
           .then(ok => {
             if (!ok) return;
-            api(`/api/wallets/${id}`, { method: "DELETE" }).catch(() => {});
+            dropRemote(id).then(afterDelete).catch(() => {});
             S.wallets = S.wallets.filter(w => w.walletId !== id);
             if (ui.openTx === id) ui.openTx = null;
             save(); render(true); toast(`${m.label} diputus`);
@@ -1343,7 +1381,32 @@
     go(i);
   });
   $("#backBtn").addEventListener("click", () => (ui.edit ? cancelEdit() : go(prevIdx(S.step))));
-  $("#nextBtn").addEventListener("click", () => {
+  // Lanjut dari Profil: aplikasi yang biasanya cair ke dompet tertentu (Gojek ke GoPay, Grab ke OVO), tapi dompet itu
+  // tidak dipilih. Hanya peringatan, tidak wajib: driver bisa menambah dompetnya atau tetap lanjut.
+  // Hasil: true = lanjut, false = tetap di Profil (dompet ditambahkan, atau dialog ditutup).
+  async function payoutWalletCheck() {
+    if (STEPS[S.step].id !== "profil") return true;
+    const p = S.profile, gaps = p.platforms.filter(id => PLATFORM_WALLET[id] && !(p.channels || []).includes(PLATFORM_WALLET[id]));
+    const sig = gaps.join(",") + "|" + (p.channels || []).join(",");
+    if (!gaps.length || ui.payoutAck === sig) return true;
+    const pairs = gaps.map(id => `${esc(platformName(id))} biasanya cair ke ${esc(channelLabel(PLATFORM_WALLET[id]))}`);
+    const wallets = [...new Set(gaps.map(id => PLATFORM_WALLET[id]))];
+    const v = await confirmBox({ title: "Pencairannya masuk ke mana?",
+      body: `${pairs.join(", ")}, tapi dompet itu tidak Anda pilih. Kalau pencairannya masuk ke sana, tambahkan supaya pendapatannya terbaca. Kalau masuk ke dompet lain, lanjut saja.`,
+      ok: `Tambahkan ${wallets.map(channelLabel).join(", ")}`, cancel: "Lanjut saja" });
+    if (v === null) return false;                       // ditutup tanpa memilih
+    if (v) {
+      wallets.forEach(w => { if (!p.channels.includes(w)) p.channels.push(w); });
+      save(); render(true); toast(`${wallets.map(channelLabel).join(", ")} ditambahkan`);
+      stepEl.querySelector(".part-uang")?.scrollIntoView({ block: "center" });
+      return false;
+    }
+    ui.payoutAck = sig;
+    return true;
+  }
+
+  $("#nextBtn").addEventListener("click", async () => {
+    if (!Object.keys(ui.edit ? editErrors() : validate()).length && !(await payoutWalletCheck())) return;
     if (ui.edit) return editNext();
     const errs = validate();
     if (Object.keys(errs).length) {
@@ -1384,10 +1447,10 @@
         resolve(v);
       };
       const onClick = (e) => {
-        if (e.target === confirmDlg) return done(false);       // klik di luar kotak
+        if (e.target === confirmDlg) return done(null);        // klik di luar kotak: bukan pilihan
         const b = e.target.closest("[data-c]"); if (b) done(b.dataset.c === "1");
       };
-      const onClose = () => done(false);                      // tombol Esc
+      const onClose = () => done(null);                       // tombol Esc: bukan pilihan
       confirmDlg.addEventListener("click", onClick);
       confirmDlg.addEventListener("close", onClose);
       confirmDlg.showModal();
@@ -1395,8 +1458,9 @@
     });
   }
   function dropAllWallets() {
-    S.wallets.forEach(w => api(`/api/wallets/${w.walletId}`, { method: "DELETE" }).catch(() => {}));
-    S.wallets = []; ui.openTx = null; ui.walletError = "";
+    // hanya e-wallet yang diputus; e statement tetap dipakai di jalur manual (langkah Dokumen)
+    S.wallets.filter(w => w.source !== "statement").forEach(w => dropRemote(w.walletId).catch(() => {}));
+    S.wallets = S.wallets.filter(w => w.source === "statement"); ui.openTx = null; ui.walletError = "";
   }
 
 
@@ -1405,7 +1469,8 @@
     S = nextDemoState();
     Object.assign(S, keep);
     S.consent.useWallet = S.wallets.some(w => w.summary);   // tanpa e-wallet tersinkron, langkah E-wallet tidak boleh menahan
-    for (const w of S.wallets) if (!S.profile.channels.includes(w.walletId)) S.profile.channels.push(w.walletId);
+    // e statement tidak dijadikan pilihan dompet diam diam: hanya e-wallet bawaan yang ikut dipilih
+    for (const w of S.wallets) if (w.source !== "statement" && !S.profile.channels.includes(w.walletId)) S.profile.channels.push(w.walletId);
     ui.analysisIdx = STEPS[S.step].id === "hasil" ? ANALYSIS.length : 0;
     save(); render(true);
     toast("Contoh data driver diisi");
@@ -1418,7 +1483,8 @@
     ui.syncing[id] = 0; ui.walletError = ""; renderWallet();
     const tick = setInterval(() => { if (ui.syncing[id] < SYNC_STEPS.length - 1) { ui.syncing[id]++; renderWallet(); } }, 600);
     try {
-      const [view] = await Promise.all([api(`/api/wallets/${id}/sync`, { method: "POST", body: {} }), new Promise(r => setTimeout(r, 1500))]);
+      const [{ others, ...view }] = await Promise.all([api(`/api/wallets/${id}/sync`, { method: "POST", body: {} }), new Promise(r => setTimeout(r, 1500))]);
+      applyOthers(others);
       const i = S.wallets.findIndex(w => w.walletId === id);
       i >= 0 ? (S.wallets[i] = view) : S.wallets.push(view);
       toast(`${walletMeta(id).label} tersinkron · ${view.summary.txCount} transaksi`);
@@ -1438,7 +1504,7 @@
       <div class="wcard-head">${walletLogo(m)}<div class="meta"><b>Hubungkan ${m.label}</b><small>Lewat ${ui.config?.mode === "live" ? esc(providerName()) : "penyedia open finance · simulasi"}</small></div></div>
       <h2 id="consentTitle">Anda akan diarahkan ke halaman penyedia open finance</h2>
       <ul class="sheet-list">
-        <li><span class="ok" aria-hidden="true">✓</span><span>Login dengan nomor HP &amp; OTP <strong>di halaman penyedia</strong>. Laju tidak melihat OTP Anda.</span></li>
+        <li><span class="ok" aria-hidden="true">✓</span><span>${phoneDigits(walletPhone(id)).length >= 9 ? `Nomor ${maskPhone(walletPhone(id))} sudah terisi. Anda tinggal memasukkan OTP <strong>di halaman penyedia</strong>.` : `Login dengan nomor HP &amp; OTP <strong>di halaman penyedia</strong>.`} Laju tidak melihat OTP Anda.</span></li>
         <li><span class="ok" aria-hidden="true">✓</span><span>Laju hanya membaca riwayat transaksi 6 bulan terakhir.</span></li>
         <li><span class="no" aria-hidden="true">✕</span><span>Laju tidak bisa memindahkan uang, membayar, atau melihat PIN Anda.</span></li>
         <li><span class="ok" aria-hidden="true">✓</span><span>Izin bisa dicabut kapan saja dengan tombol putuskan.</span></li>
@@ -1456,7 +1522,8 @@
     if (b.dataset.dlg === "cancel") return dlg.close();
     b.disabled = true; b.innerHTML = '<span class="spinner" aria-hidden="true"></span> Membuka…';
     try {
-      const { redirectUrl } = await api("/api/wallets/link", { method: "POST", body: { walletId: dlg.dataset.wallet } });
+      const id = dlg.dataset.wallet;
+      const { redirectUrl } = await api("/api/wallets/link", { method: "POST", body: { walletId: id, phone: phoneDigits(walletPhone(id)) } });
       save();
       location.assign(redirectUrl);
     } catch (e) {
@@ -1556,7 +1623,9 @@
       history.replaceState(null, "", location.pathname);
       S.consent.useWallet = true;
       S.step = EW; S.maxStep = Math.max(S.maxStep, EW);
-      if (link === "error") ui.walletError = LINK_ERRORS[qs.get("reason")] || "Gagal menghubungkan e-wallet. Silakan coba lagi.";
+      if (link === "error") ui.walletError = qs.get("reason") === "phone_mismatch"
+        ? `Nomor ${walletMeta(linkedId).label} yang dihubungkan (akhiran ${esc(qs.get("got") || "")}) beda dengan nomor yang Anda isi di Izin data (${maskPhone(walletPhone(linkedId))}). Hubungkan pakai nomor yang sama, atau ubah nomornya di Izin data.`
+        : LINK_ERRORS[qs.get("reason")] || "Gagal menghubungkan e-wallet. Silakan coba lagi.";
     }
     // Onboarding sudah selesai: perubahan data lewat Profil di app, bukan wizard dari awal.
     if (S.finished && !ui.edit && !link) { location.replace("app.html#profil"); return; }
