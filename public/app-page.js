@@ -28,6 +28,8 @@
     lane: '<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 7h18M3 17h18M7 7v10M17 7v10"/></svg>',
     lock: '<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>',
     undo: '<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/></svg>',
+    close: '<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg>',
+    back: '<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 5H9L3 12l6 7h12a1 1 0 0 0 1-1V6a1 1 0 0 0-1-1Z"/><path d="m18 9-5 6m0-6 5 6"/></svg>',
   };
 
   function route() {
@@ -144,7 +146,7 @@
     const em = ["bantalan", "darurat"].find(id => P[id] && st(id)?.status !== "selesai");
     if (em) rows.push(["Dana darurat", perDay(P[em].perDay), em]);
     if (P.tumbuh && st("tumbuh")?.status !== "selesai") rows.push(["Tabungan tujuan", perDay(P.tumbuh.perDay), "tumbuh"]);
-    if (st("investasi")?.target > 0 && st("investasi")?.status !== "terkunci") rows.push(["Uang tumbuh", [`Setor ${rp(st("investasi").target)} per bulan`], "investasi"]);
+    if (st("investasi")?.target > 0 && st("investasi")?.status !== "terkunci") rows.push(["Tabungan tumbuh", [`Setor ${rp(st("investasi").target)} per bulan`], "investasi"]);
     if (P.lane && x.lane.active && !x.lane.done) rows.push(["Pelunasan utang", [`Bayar utang lebih ${rp(P.lane.extra)} per bulan`], "utang"]);
     const act = activeStep();
     return `<section class="card" aria-labelledby="pl-h">
@@ -227,9 +229,10 @@
 
   // Jalur utang ringkas (dipakai di dashboard & langkah lain)
   function laneMini(lane) {
+    const wajib = !lane.highDone;
     return `<a class="lane-mini" href="#milestone/utang">
       <span class="lane-ic">${IC.lane}</span>
-      <span class="lane-txt"><b>Sambil jalan: pelunasan utang ${lane.progress}%</b><small>Sisa ${rp(lane.left)}${lane.months != null ? ` · perkiraan lunas ${monthYear(lane.months)}` : ""}</small></span>
+      <span class="lane-txt"><b>${wajib ? `Wajib lunas dulu: ${lane.highCount} utang bunga tinggi` : `Sambil jalan: pelunasan utang ${lane.progress}%`}</b><small>${wajib ? `Sisa ${rp(lane.highLeft)}. Utang lain boleh jalan terus.` : `Sisa ${rp(lane.left)}${lane.months != null ? ` · perkiraan lunas ${monthYear(lane.months)}` : ""}`}</small></span>
       <span class="chev" aria-hidden="true">›</span>
     </a>`;
   }
@@ -362,10 +365,13 @@
           <span class="node">${m.id === "rapor" ? IC.star : m.status === "selesai" ? ICON.check : m.number}</span>
         </a></li>`).join("")}</ol>`;
     if (!lane.active) return `<div class="mtrack-wrap">${nodes}</div>`;
-    const left = (1.5 / n) * 100, width = (6 / n) * 100;   // dari tengah node 2 sampai tengah node 8
+    // Ujung bar dipatok ke titik tengah node, jadi selalu sejajar dengan lingkaran di atasnya:
+    // dari node kedua sampai node terakhir sebelum Rapor. Tiap node lebarnya 1/n.
+    const awal = 1, akhir = Math.max(awal + 1, n - 2);
+    const left = ((awal + 0.5) / n) * 100, width = ((akhir - awal) / n) * 100;
     return `<div class="mtrack-wrap has-lane">${nodes}
-      <a class="lane-band ${lane.done ? "done" : ""} ${currentId === "utang" ? "current" : ""}" href="#milestone/utang" style="left:${left}%;width:${width}%" data-tip="Jalur utang ${lane.progress}% · sisa ${rp(lane.left)}" aria-label="Pelunasan utang, ${lane.progress}%">
-        <i style="width:${Math.max(lane.progress, 2)}%"></i><span>Utang ${lane.progress}%</span>
+      <a class="lane-band ${lane.highDone ? "done" : ""} ${currentId === "utang" ? "current" : ""}" href="#milestone/utang" style="left:${left}%;width:${width}%" data-tip="Utang bunga tinggi ${lane.highProgress}% · sisa ${rp(lane.highLeft)}" aria-label="Pelunasan utang bunga tinggi, ${lane.highProgress}%">
+        <i style="width:${Math.max(lane.highProgress, 2)}%"></i><span>Bunga tinggi ${lane.highProgress}%</span>
       </a></div>`;
   }
 
@@ -407,6 +413,7 @@
       <div class="stack">
         ${goalCard(m)}
         ${proofCard(m)}
+        ${debtDutyCard(m)}
         ${sampleCard(m)}
         ${lane.active && !lane.done && m.tool !== "debtgoal" ? laneMini(lane) : ""}
         ${updateCard(m)}
@@ -483,7 +490,7 @@
 
   function sampleFor(m) {
     const today = isoOf(new Date()), st = (S.milestones.st ||= {});
-    // Masa bertahan dimundurkan, kalau tidak Step 2 dan 3 menunggu 28 hari sebelum jadi selesai.
+    // Lama bertahan dimundurkan supaya riwayatnya terlihat sudah stabil, bukan baru hari ini.
     const lewatiMasaBertahan = (id) => {
       const e = (st[id] ||= { status: "", since: today });
       const d = new Date(); d.setDate(d.getDate() - (MILESTONE.HOLD_DAYS + 1));
@@ -502,18 +509,22 @@
       const target = Math.max(0, m.target || 0);
       S.resilience.savings = Math.max(frozenMoney(), Math.ceil((target * 1.05) / 1000) * 1000);
       let lunas = 0;
-      if (m.id === "bantalan") for (const d of S.debts || []) {
-        if ((HIGH_COST.includes(d.type) || Number(d.rate) >= 2) && Number(d.remaining) > 0) { d.remaining = 0; lunas++; }
+      if (m.id === "bantalan") {
+        for (const d of S.debts || []) if (isHighCost(d) && Number(d.remaining) > 0) { d.remaining = 0; lunas++; }
+        // Satu utang berbunga rendah sengaja disisakan belum lunas, supaya terlihat bahwa
+        // utang seperti itu tidak menahan Step 3.
+        const adaRendah = (S.debts || []).some(d => Number(d.remaining) > 0 && !isHighCost(d));
+        if (!adaRendah) (S.debts ||= []).push({ type: "Koperasi", remaining: 4000000, months: 24, rate: "0.8", due: "" });
       }
       lewatiMasaBertahan(m.id);
-      return `Uang beku diisi ${rp(S.resilience.savings)}${lunas ? ` · ${lunas} utang bunga tinggi ditandai lunas` : ""}`;
+      return `Tabungan aman diisi ${rp(S.resilience.savings)}${lunas ? ` · ${lunas} utang bunga tinggi ditandai lunas` : ""}`;
     }
     if (m.tool === "growth") {
       const v = Math.max(Math.round(m.target || 0), 50000), g = (S.growth ||= {});
       for (let i = 0; i <= MILESTONE.STEP4_STREAK_MONTHS; i++) { const d = new Date(); d.setMonth(d.getMonth() - i); g[ymOf(d)] = v; }
       S.resilience.growth = Math.max(growthMoney(), v * MILESTONE.STEP4_STREAK_MONTHS);
       delete S.milestones.growthSpent;
-      return `Setoran uang tumbuh ${rp(v)} diisi ${MILESTONE.STEP4_STREAK_MONTHS} bulan terakhir`;
+      return `Setoran tabungan tumbuh ${rp(v)} diisi ${MILESTONE.STEP4_STREAK_MONTHS} bulan terakhir`;
     }
     if (m.tool === "goals") {
       const gd = (S.resilience.goalData ||= {});
@@ -536,13 +547,41 @@
   // Kartu data contoh: hanya untuk step yang syaratnya berupa angka di aplikasi.
   // Step 1 punya tombolnya sendiri di kartu bukti, karena di sana yang diisi adalah e statement.
   function sampleCard(m) {
-    if (!bisaSampel() || m.id === "data") return "";
+    // Step 1 memakai tombol di kartu Bukti, yang sekaligus mengisi angka contoh.
+    if (!bisaSampel() || m.id === "data" || m.id === "minus") return "";
     const sudah = m.status === "selesai";
     return `<section class="card${sudah ? " done-card" : ""}" aria-labelledby="smp-h">
       ${sudah ? doneRibbon("Syarat terpenuhi") : ""}
       <div class="card-head"><h2 id="smp-h">Data contoh</h2><p>Mengisi angka paling kecil yang membuat step ini selesai, untuk mencoba alurnya.</p></div>
       <div class="chips"><button type="button" class="btn sm" data-act="step-sample">${sudah ? "Isi ulang data contoh" : "Pakai data contoh"}</button></div>
       <p class="hint">Angka ini hanya contoh. Hapus lewat tombol Reset di Profil kalau ingin mulai dari nol.</p>
+    </section>`;
+  }
+
+  // ---------- Step 2: utang mana yang wajib lunas ----------
+  // Yang menahan Step 2 hanya utang berbunga tinggi. Utang lain tetap ditampilkan supaya jelas
+  // bahwa sisanya boleh dicicil terus tanpa menahan langkah berikutnya.
+  function debtDutyCard(m) {
+    if (m.id !== "bantalan") return "";
+    const buka = S.debts.map((d, i) => ({ d, i })).filter(o => debtOpen(o.d));
+    if (!buka.length) return "";
+    const wajib = buka.filter(o => isHighCost(o.d));
+    const lain = buka.filter(o => !isHighCost(o.d));
+    const sisaWajib = wajib.reduce((t, o) => t + Number(o.d.remaining), 0);
+    const baris = (o, tag) => `<div class="duty-row">
+      <span class="duty-txt"><b>${esc(debtTypeLabel(o.d))}</b>${tag}<small>Sisa ${rp(Number(o.d.remaining))}${debtRate(o.d) ? ` · bunga ${String(debtRate(o.d)).replace(".", ",")}% per bulan` : ""}</small></span>
+      <button type="button" class="btn sm secondary" data-act="catat" data-kind="bayar" data-i="${o.i}">Catat bayar</button>
+    </div>`;
+    return `<section class="card${wajib.length ? "" : " done-card"}" aria-labelledby="duty-h">
+      ${wajib.length ? "" : doneRibbon("Utang wajib lunas")}
+      <div class="card-head"><h2 id="duty-h">Utang yang wajib lunas di step ini</h2>
+        <p>${wajib.length ? `${wajib.length} utang berbunga tinggi, sisa ${rp(sisaWajib)}. Hanya ini yang menahan Step 3.` : "Tidak ada lagi utang berbunga tinggi. Step ini tidak lagi tertahan utang."}</p></div>
+      ${wajib.length ? `<div class="duty-list">${wajib.map(o => baris(o, '<span class="tag warn">Bunga tinggi</span>')).join("")}</div>` : ""}
+      ${lain.length ? `<div class="duty-list muted">
+        <p class="lbl">Boleh jalan terus</p>
+        <p class="hint">Utang ini tidak menahan Step 3. Cicil seperti biasa.</p>
+        ${lain.map(o => baris(o, "")).join("")}
+      </div>` : ""}
     </section>`;
   }
 
@@ -564,7 +603,7 @@
         <p class="lbl">Selesai jika</p>
         <ul>${m.criteria.map(k => `<li class="${k.met ? "met" : ""} ${k.optional ? "opt" : ""}"><span class="ci">${k.met ? ST_ICON.good : IC.circle}</span><span>${esc(k.label)}${k.value ? ` <small>· ${esc(k.value)}</small>` : ""}</span></li>`).join("")}</ul>
       </div>
-      <p class="hint">Progres <b>${m.progress}%</b> = ${esc(m.explain)}</p>
+      <p class="hint">Progres ${m.progress}%. Dihitung dari ${esc(m.explain)}</p>
     </section>`;
   }
 
@@ -593,12 +632,10 @@
   }
 
   const pctOf = (v, min, max) => (max > min ? ((v - min) / (max - min)) * 100 : 0);
-  const moneyIn = (id, value, placeholder = "0") =>
-    `<div class="money"><span aria-hidden="true">Rp</span><input class="input num" id="${id}" inputmode="numeric" autocomplete="off" data-money value="${value ? fmt(value) : ""}" placeholder="${placeholder}"></div>`;
   const moneyVal = (id) => Number(($("#" + id)?.value || "").replace(/\D/g, "")) || 0;
   const POT = {
-    emergency: { path: "resilience.savings", label: "Uang beku", type: "deposit" },
-    growth: { path: "resilience.growth", label: "Uang tumbuh", type: "growth-deposit" },
+    emergency: { path: "resilience.savings", label: "Tabungan aman", type: "deposit" },
+    growth: { path: "resilience.growth", label: "Tabungan tumbuh", type: "growth-deposit" },
   };
   const goalPath = (id) => `resilience.goalData.${id}.saved`;
 
@@ -630,7 +667,7 @@
     if (m.tool === "buffer") {
       const now = frozenMoney();
       return `<section class="card" aria-labelledby="upd-h">
-        <div class="card-head"><h2 id="upd-h">Uang beku: ${rp(now)}</h2><p>Satu saldo untuk bantalan Step 2 dan dana darurat Step 3.</p></div>
+        <div class="card-head"><h2 id="upd-h">Tabungan aman: ${rp(now)}</h2><p>Satu saldo untuk bantalan Step 2 dan dana darurat Step 3.</p></div>
         ${m.checkpoints ? `<ul class="checkpoints">${m.checkpoints.map(k => `<li class="${k.met ? "met" : ""}"><span class="ci">${k.met ? ST_ICON.good : IC.circle}</span><span>${k.label}</span></li>`).join("")}</ul>` : ""}
         <div class="chips">
           <button type="button" class="btn sm" data-act="catat" data-kind="setor">${ICON.plus} Setor</button>
@@ -643,10 +680,10 @@
     if (m.tool === "growth") {
       const ym = isoOf(new Date()).slice(0, 7);
       return `<section class="card" aria-labelledby="upd-h">
-        <div class="card-head"><h2 id="upd-h">Uang tumbuh: ${rp(growthMoney())}</h2><p>Setoran bulan ini ${rp(Number((S.growth || {})[ym]) || 0)} dari target ${rp(m.target)}.</p></div>
+        <div class="card-head"><h2 id="upd-h">Tabungan tumbuh: ${rp(growthMoney())}</h2><p>Setoran bulan ini ${rp(Number((S.growth || {})[ym]) || 0)} dari target ${rp(m.target)}.</p></div>
         ${m.warn ? `<div class="note accent">${ICON.info}<span>${esc(m.warn)}</span></div>` : ""}
         <div class="chips">
-          <button type="button" class="btn sm" data-act="catat" data-kind="setor-tumbuh">${ICON.plus} Setor uang tumbuh</button>
+          <button type="button" class="btn sm" data-act="catat" data-kind="setor-tumbuh">${ICON.plus} Setor tabungan tumbuh</button>
           ${growthMoney() > 0 ? `<button type="button" class="btn sm secondary" data-act="catat" data-kind="ambil-tumbuh">Ambil</button>` : ""}
         </div>
         <p class="hint">Laju hanya menjelaskan jenis tempat menyimpan. Laju tidak menyarankan produk investasi tertentu.</p>
@@ -724,11 +761,11 @@
         ${doneRibbon()}
         <div class="card-head"><h2 id="plan-h">Rencana setoran</h2><p>Target sudah terpenuhi. Angkanya tetap ditampilkan.</p></div>
         <dl class="kv-list">
-          <div><dt>Uang beku sekarang</dt><dd class="num">${rp(now)}</dd></div>
+          <div><dt>Tabungan aman sekarang</dt><dd class="num">${rp(now)}</dd></div>
           <div><dt>Target step ini</dt><dd class="num">${rp(target)}</dd></div>
           <div><dt>Lebih dari target</dt><dd class="num">${rp(now - target)}</dd></div>
         </dl>
-        ${goalBar({ kind: "fill", cur: now, tgt: target, curLabel: "Uang beku", tgtLabel: "Target", fmt: rp })}
+        ${goalBar({ kind: "fill", cur: now, tgt: target, curLabel: "Tabungan aman", tgtLabel: "Target", fmt: rp })}
       </section>`;
       const r = perDayRange(c);
       const perDay = clamp(sim[m.id]?.perday ?? S.milestones.plans[m.id]?.perDay ?? defaultPerDay(x, m), r.min, r.max);
@@ -868,7 +905,7 @@
           ${lane.done ? `<p class="goal-gap done">${ST_ICON.good}<span>Semua utang lunas</span></p>` : `<p class="goal-gap">${IC.target}<span>${lane.months != null ? `Perkiraan lunas ${monthYear(lane.months)} (${lane.months} bulan)` : "Belum turun, tambah pembayaran"}</span></p>`}
           ${goalBar({ kind: "paid", paid: lane.paid, left: lane.left, fmt: rp })}
           <div class="criteria"><p class="lbl">Titik pemeriksaan</p><ul>${lane.checkpoints.map(k => `<li class="${k.met ? "met" : ""}"><span class="ci">${k.met ? ST_ICON.good : IC.circle}</span><span>${k.label}${!k.met ? ` <small>· sisa ${rp(k.left)}</small>` : ""}</span></li>`).join("")}</ul></div>
-          <p class="hint">Progres <b>${lane.progress}%</b> = utang yang sudah dibayar ÷ jumlah tertinggi yang pernah tercatat (${rp(lane.base)}).</p>
+          <p class="hint">Progres ${lane.progress}%. Dihitung dari utang yang sudah dibayar ÷ jumlah tertinggi yang pernah tercatat (${rp(lane.base)}).</p>
         </section>` : card("Tidak ada utang tercatat", "", `<p class="hint">Jalur ini tidak aktif. Kalau ada utang, <a href="${editUrl("utang")}">tambahkan di Profil</a>.</p>`)}
         ${lane.active && !lane.done ? `<section class="card" aria-labelledby="gr-h">
           <div class="card-head"><h2 id="gr-h">Aturan selama jalur berjalan</h2></div>
@@ -994,7 +1031,6 @@
       ["BPJS aktif", "bpjs", (v) => `${v}/2`, 1],
     ];
     const arrow = (d, dir) => !d ? `<span class="dl same">=</span>` : (d * dir > 0 ? `<span class="dl up">${d > 0 ? "▲" : "▼"}</span>` : `<span class="dl down">${d > 0 ? "▲" : "▼"}</span>`);
-    const ai = buildAIContext(), aiJson = JSON.stringify(ai, null, 2);
     return `<div class="page-head">
         <p class="eyebrow">${final ? "Rapor akhir" : "Rapor sementara"}${start ? ` · ${days} hari sejak ${fmtShortDate(parseIso(start.d))}` : ""}</p>
         <h1 class="step-title">Rapor ${firstName()}</h1>
@@ -1065,14 +1101,11 @@
           ${ledger.length ? `<ul class="tx-list">${ledger.slice(-5).reverse().map(e => `<li class="tx"><span class="d">${esc(e.label)}</span><span class="a num">${e.amount ? rp(e.amount) : ""}</span><span class="m">${fmtShortDate(new Date(e.at))}</span></li>`).join("")}</ul>` : `<p class="hint">Belum ada catatan. Tekan <b>+ Catat</b> saat ada setoran atau bayar utang.</p>`}
         </section>
 
-        <details class="card more ai-card"><summary>Data untuk analisis AI <small>(${(aiJson.length / 1024).toFixed(1).replace(".", ",")} KB, tanpa nama, HP, password)</small></summary>
-          <div class="ai-run">
-            <button type="button" class="btn primary" id="aiGo">Minta analisis Gemini</button>
-            <p class="hint">Yang dikirim hanya angka di bawah ini. Nama, nomor HP, dan password tidak ikut.</p>
-          </div>
+        <section class="card ai-card" aria-labelledby="ai-h">
+          <div class="card-head"><h2 id="ai-h">Analisis AI</h2><p>Hanya angka keuangan yang dikirim. Nama, nomor HP, dan password tidak ikut.</p></div>
+          <div class="ai-run"><button type="button" class="btn primary" id="aiGo">Minta AI menganalisa</button></div>
           <div class="ai-out" id="aiOut" aria-live="polite"></div>
-          <pre class="ai-json">${esc(aiJson)}</pre>
-        </details>
+        </section>
       </div>`;
   }
 
@@ -1144,7 +1177,14 @@
         save(); render(true); return snack("Rencana disimpan");
       }
       case "save-lane": S.milestones.plans.lane = { extra: Number($("#sim-extra").value) }; save(); render(true); return snack("Rencana pelunasan disimpan");
-      case "proof-sample": ui.proofName = proofName(); sendProof("/api/statements/sample", { name: proofName() || "JOJO" }); return;
+      case "proof-sample": {
+        // Satu tombol: angka contoh di Profil diisi dulu, lalu e statement contoh diambil
+        // sebagai bukti 30 hari. Dua duanya diperlukan supaya Step 1 bisa dinyatakan selesai.
+        ui.proofName = proofName();
+        if (m) { sampleFor(m); save(); }
+        sendProof("/api/statements/sample", { name: proofName() || "JOJO" });
+        return;
+      }
       case "step-sample": {
         if (!m) return;
         const before = health(calc()).total;
@@ -1196,7 +1236,7 @@
       identitas: `${S.account.fullName || "-"} · ${S.account.city ? cityLabel() : "-"}`,
       kerja: `${p.platforms.map(platformName).join(", ") || "-"} · ${p.vehicle === "mobil" ? "Mobil" : "Motor"} ${(OWNERSHIP.find(o => o.id === p.ownership)?.label || "").toLowerCase()} · ${p.hoursPerDay} jam × ${p.daysPerWeek} hari`,
       keluarga: `${p.dependents} tanggungan${p.sideJobs.length ? ` · ${p.sideJobs.join(", ")}` : ""}`,
-      tabungan: `Uang beku ${rpShort(Number(r.savings) || 0)} · Uang tumbuh ${rpShort(Number(r.growth) || 0)}`,
+      tabungan: `Tabungan aman ${rpShort(Number(r.savings) || 0)} · Tabungan tumbuh ${rpShort(Number(r.growth) || 0)}`,
       uang: `${(p.channels || []).map(channelLabel).join(", ") || "-"} · rekening bank ${hasBankEvidence() ? "terbukti" : "belum ada bukti"}`,
       ewallet: (() => { const w = ch.connected.length + ch.notConnected.length;
         return !ch.connected.length ? "Belum terhubung" : ch.notConnected.length ? `${ch.connected.length}/${w} terhubung · Belum: ${ch.notConnected.map(channelLabel).join(", ")}` : `Terhubung: ${ch.connected.map(channelLabel).join(", ")}`; })(),
@@ -1230,90 +1270,118 @@
   // ---------- + Catat: kejadian yang memindahkan uang ----------
   const catatDlg = $("#catatDlg");
   const cat = { kind: null, i: null, reason: "", direct: false };
-  const CATAT_TITLE = { setor: "Setor uang beku", "setor-tujuan": "Setor tabungan tujuan", ambil: "Ambil uang beku",
-    "setor-tumbuh": "Setor uang tumbuh", "ambil-tumbuh": "Ambil uang tumbuh", bayar: "Bayar utang", sakit: "Mode Sakit" };
   const openDebtRows = () => S.debts.map((d, i) => ({ d, i })).filter(o => debtOpen(o.d));
-  function catatKinds() {
-    const r = S.resilience, open = openDebtRows(), goals = r.goals || [];
-    const terkumpul = goals.reduce((t, id) => t + (Number((r.goalData || {})[id]?.saved) || 0), 0);
-    return [
-      { k: "setor", s: `Uang beku sekarang ${rp(Number(r.savings) || 0)}` },
-      ...(goals.length ? [{ k: "setor-tujuan", s: `${goals.length} tujuan · terkumpul ${rpShort(terkumpul)}` }] : []),
-      { k: "setor-tumbuh", s: `Uang tumbuh sekarang ${rp(Number(r.growth) || 0)}` },
-      ...(Number(r.savings) > 0 ? [{ k: "ambil", s: "Wajib pilih alasannya" }] : []),
-      ...(Number(r.growth) > 0 ? [{ k: "ambil-tumbuh", s: "Menghentikan hitungan beruntun Step 4" }] : []),
-      ...(open.length ? [{ k: "bayar", s: `${open.length} utang · sisa ${rpShort(open.reduce((t, o) => t + Number(o.d.remaining), 0))}` }] : []),
-      { k: "sakit", s: sickNow() ? "Sedang aktif, ketuk untuk mengakhiri" : "Tandai periode tidak bisa narik" },
+  // ---------- Catat: satu layar, papan angka, lalu pilih tujuannya ----------
+  // Tab di atas memilih jenis catatan, kolom di bawah memilih pos yang tepat
+  // (tabungan aman, tabungan tumbuh, tiap tujuan, atau utang mana), supaya angkanya masuk ke tempat benar.
+  const CATAT_TABS = [["setor", "Setor"], ["ambil", "Ambil"], ["bayar", "Bayar utang"]];
+
+  // Daftar pos untuk tab yang sedang aktif. value dipakai sebagai cat.target.
+  function catatTargets(tab) {
+    const r = S.resilience, goals = r.goals || [];
+    if (tab === "setor") return [
+      { v: "beku", label: "Tabungan aman", sub: rp(Number(r.savings) || 0) },
+      { v: "tumbuh", label: "Tabungan tumbuh", sub: rp(Number(r.growth) || 0) },
+      ...goals.map(id => ({ v: `goal:${id}`, label: goalLabel(id), sub: rp(Number((r.goalData || {})[id]?.saved) || 0) })),
     ];
+    if (tab === "ambil") return [
+      ...(Number(r.savings) > 0 ? [{ v: "beku", label: "Tabungan aman", sub: rp(Number(r.savings)) }] : []),
+      ...(Number(r.growth) > 0 ? [{ v: "tumbuh", label: "Tabungan tumbuh", sub: rp(Number(r.growth)) }] : []),
+    ];
+    return openDebtRows().map(o => ({ v: `debt:${o.i}`, label: debtTypeLabel(o.d), sub: rp(Number(o.d.remaining)) }));
   }
+
+  const KEYS = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "000", "0", "back"];
+
   function renderCatat() {
-    let body;
-    if (!cat.kind) {
-      body = `<h2 id="catatTitle">Catat</h2>
-        <div class="catat-list">${catatKinds().map(o => `<button type="button" class="catat-opt" data-ck="${o.k}"><b>${CATAT_TITLE[o.k]}</b><small>${esc(o.s)}</small></button>`).join("")}</div>
-        <p class="hint">Hidup berubah? <a href="#profil" data-cclose>Ubah di Profil</a></p>
-        <div class="sheet-actions"><button type="button" class="btn secondary sm" data-cclose>Tutup</button></div>`;
-    } else if (cat.kind === "sakit") {
-      const on = sickNow();
-      body = `<h2 id="catatTitle">Mode Sakit</h2>
-        <p style="font-size:.9rem">${on ? "Mode Sakit sedang aktif. Akhiri kalau Anda sudah bisa narik lagi." : "Tandai periode Anda tidak bisa narik. Selama periode ini, sisa uang yang minus tidak membuat Step 1 mundur."}</p>
-        <div class="sheet-actions"><button type="button" class="btn secondary sm" data-cback>Kembali</button><button type="button" class="btn sm" data-csick>${on ? "Akhiri Mode Sakit" : "Mulai Mode Sakit"}</button></div>`;
-    } else {
-      const k = cat.kind, open = openDebtRows(), goals = S.resilience.goals || [];
-      if (k === "bayar" && !open.some(o => o.i === cat.i)) cat.i = open[0]?.i ?? null;
-      if (k === "setor-tujuan" && !goals.includes(cat.goal)) cat.goal = goals[0] || "";
-      const d = cat.i != null ? S.debts[cat.i] : null;
-      body = `<h2 id="catatTitle">${CATAT_TITLE[k]}</h2>
-        ${k === "bayar" ? `<div class="field"><span class="lbl">Utang</span><div class="chips">${open.map(o => `<button type="button" class="chip" aria-pressed="${o.i === cat.i}" data-ci="${o.i}">${esc(debtTypeLabel(o.d))} · ${rpShort(Number(o.d.remaining))}</button>`).join("")}</div></div>` : ""}
-        ${k === "setor-tujuan" ? `<div class="field"><span class="lbl">Tujuan</span><div class="chips">${goals.map(id => `<button type="button" class="chip" aria-pressed="${id === cat.goal}" data-cg="${esc(id)}">${esc(goalLabel(id))}</button>`).join("")}</div></div>` : ""}
-        ${k === "ambil" ? `<div class="field"><span class="lbl">Alasan pengambilan</span><span class="hint">Darurat yang sah tidak menurunkan skor dan tidak membuat step mundur.</span>
-          <div class="chips">${WITHDRAW_REASONS.map(([v, l]) => `<button type="button" class="chip ${v === "lainnya" ? "peach" : ""}" aria-pressed="${cat.reason === v}" data-cr="${v}">${l}</button>`).join("")}</div></div>` : ""}
-        <div class="field"><label for="catat-amt">Jumlah</label>${moneyIn("catat-amt", cat.amt || 0)}
-          <div class="chips quick">${k === "bayar" && d ? `<button type="button" class="chip" data-ca="${Number(d.remaining)}">Lunas ${rpShort(Number(d.remaining))}</button>` : [10000, 20000, 50000, 100000].map(a2 => `<button type="button" class="chip" data-ca="${a2}">${rpShort(a2)}</button>`).join("")}</div></div>
-        ${k === "ambil" && !cat.reason ? `<p class="hint">Pilih alasan dulu sebelum lanjut.</p>` : ""}
-        <div class="sheet-actions"><button type="button" class="btn secondary sm" data-cback>${cat.direct ? "Batal" : "Kembali"}</button><button type="button" class="btn sm" data-cgo ${k === "ambil" && !cat.reason ? "disabled" : ""}>Lanjut</button></div>`;
-    }
-    catatDlg.innerHTML = `<div class="sheet-body">${body}</div>`;
+    const tabs = CATAT_TABS.filter(([v]) => v !== "bayar" || openDebtRows().length);
+    if (!tabs.some(([v]) => v === cat.tab)) cat.tab = tabs[0][0];
+    const pos = catatTargets(cat.tab);
+    if (!pos.some(o => o.v === cat.target)) cat.target = pos[0]?.v || "";
+    const perluAlasan = cat.tab === "ambil" && cat.target === "beku";
+    const utang = cat.target.startsWith("debt:") ? S.debts[Number(cat.target.slice(5))] : null;
+    const siap = cat.amt > 0 && !!cat.target && (!perluAlasan || !!cat.reason);
+
+    catatDlg.innerHTML = `<div class="sheet-body catat-sheet">
+      <div class="catat-head">
+        <h2 id="catatTitle">Catat</h2>
+        <button type="button" class="icon-btn" data-cclose aria-label="Tutup">${IC.close}</button>
+      </div>
+      <div class="seg" role="group" aria-label="Jenis catatan">
+        ${tabs.map(([v, l]) => `<button type="button" class="seg-opt" aria-pressed="${v === cat.tab}" data-ctab="${v}">${l}</button>`).join("")}
+      </div>
+      <p class="catat-amt" aria-live="polite" aria-label="Jumlah ${rp(cat.amt)}"><span>Rp</span><b class="num ${cat.amt ? "" : "nol"}">${fmt(cat.amt || 0)}</b></p>
+      <div class="keypad">${KEYS.map(k => k === "back"
+        ? `<button type="button" class="key" data-ckey="back" aria-label="Hapus satu angka">${IC.back}</button>`
+        : `<button type="button" class="key" data-ckey="${k}">${k}</button>`).join("")}</div>
+      ${utang ? `<div class="chips quick"><button type="button" class="chip" data-ca="${Number(utang.remaining)}">Lunas ${rpShort(Number(utang.remaining))}</button></div>` : ""}
+      <div class="catat-pos">
+        <p class="lbl">${cat.tab === "bayar" ? "Utang mana" : cat.tab === "ambil" ? "Diambil dari" : "Masuk ke pos"}</p>
+        ${pos.length ? `<div class="chips">${pos.map(o => `<button type="button" class="chip" aria-pressed="${o.v === cat.target}" data-cpos="${esc(o.v)}">${esc(o.label)} <small>${esc(o.sub)}</small></button>`).join("")}</div>`
+          : `<p class="hint">Belum ada pos untuk jenis ini.</p>`}
+      </div>
+      ${perluAlasan ? `<div class="catat-pos">
+        <p class="lbl">Alasan pengambilan</p>
+        <span class="hint">Darurat yang sah tidak menurunkan skor dan tidak membuat step mundur.</span>
+        <div class="chips">${WITHDRAW_REASONS.map(([v, l]) => `<button type="button" class="chip ${v === "lainnya" ? "peach" : ""}" aria-pressed="${cat.reason === v}" data-cr="${v}">${l}</button>`).join("")}</div>
+      </div>` : ""}
+      <div class="sheet-actions">
+        <button type="button" class="btn sm grow" data-cgo ${siap ? "" : "disabled"}>Simpan</button>
+      </div>
+    </div>`;
   }
+
+  // Pilihan di layar Catat dipetakan ke jenis catatan yang sudah ada di submitCatat.
+  function catatKind() {
+    if (cat.tab === "bayar") return "bayar";
+    if (cat.target === "tumbuh") return cat.tab === "ambil" ? "ambil-tumbuh" : "setor-tumbuh";
+    if (cat.target.startsWith("goal:")) return "setor-tujuan";
+    return cat.tab === "ambil" ? "ambil" : "setor";
+  }
+
   function openCatat(kind = null, i = null, goal = "") {
-    Object.assign(cat, { kind, i, goal, reason: "", amt: 0, direct: !!kind });
+    const tab = kind === "bayar" ? "bayar" : String(kind || "").startsWith("ambil") ? "ambil" : "setor";
+    const target = kind === "bayar" ? `debt:${i ?? openDebtRows()[0]?.i ?? 0}`
+      : goal ? `goal:${goal}`
+      : String(kind || "").includes("tumbuh") ? "tumbuh" : "beku";
+    Object.assign(cat, { kind: kind === "sakit" ? "sakit" : null, tab, target, i, goal, reason: "", amt: 0, direct: !!kind });
     renderCatat();
     if (!catatDlg.open) catatDlg.showModal();
-    (catatDlg.querySelector("#catat-amt") || catatDlg.querySelector("[data-ck]"))?.focus();
+    catatDlg.querySelector("[data-ckey]")?.focus();
   }
   const ymNow = () => isoOf(new Date()).slice(0, 7);
   function submitCatat(amt) {
     const r = S.resilience;
     if (cat.kind === "setor") {
       const now = Number(r.savings) || 0;
-      return commit({ title: `Catat setoran ${rp(amt)}?`, rows: [["Uang beku", rp(now), rp(now + amt)]], note: "Pastikan uangnya sudah Anda pisahkan.",
-        type: "deposit", label: `Setoran ${rp(amt)} ke uang beku`, amount: amt, step: "tabungan", paths: ["resilience.savings"],
+      return commit({ title: `Catat setoran ${rp(amt)}?`, rows: [["Tabungan aman", rp(now), rp(now + amt)]], note: "Pastikan uangnya sudah Anda pisahkan.",
+        type: "deposit", label: `Setoran ${rp(amt)} ke tabungan aman`, amount: amt, step: "tabungan", paths: ["resilience.savings"],
         apply: () => { r.savings = now + amt; }, msg: `Setoran ${rp(amt)} dicatat` });
     }
     if (cat.kind === "setor-tujuan" && cat.goal) {
       const path = `resilience.goalData.${cat.goal}.saved`, now = Number(get(path)) || 0;
-      return commit({ title: `Catat setoran ${rp(amt)}?`, rows: [[goalLabel(cat.goal), rp(now), rp(now + amt)]], note: "Tabungan tujuan terpisah dari uang beku.",
+      return commit({ title: `Catat setoran ${rp(amt)}?`, rows: [[goalLabel(cat.goal), rp(now), rp(now + amt)]], note: "Tabungan tujuan terpisah dari tabungan aman.",
         type: "goal-deposit", label: `Setoran ${rp(amt)} ke ${goalLabel(cat.goal)}`, amount: amt, step: "tumbuh", paths: [path],
         apply: () => set(path, now + amt), msg: `Setoran ${rp(amt)} dicatat` });
     }
     if (cat.kind === "setor-tumbuh") {
       const now = Number(r.growth) || 0, ym = ymNow(), bulanIni = Number((S.growth || {})[ym]) || 0;
-      return commit({ title: `Catat setoran ${rp(amt)}?`, rows: [["Uang tumbuh", rp(now), rp(now + amt)], ["Setoran bulan ini", rp(bulanIni), rp(bulanIni + amt)]],
+      return commit({ title: `Catat setoran ${rp(amt)}?`, rows: [["Tabungan tumbuh", rp(now), rp(now + amt)], ["Setoran bulan ini", rp(bulanIni), rp(bulanIni + amt)]],
         note: "Setoran bulan ini dipakai untuk hitungan beruntun Step 4.",
-        type: "growth-deposit", label: `Setoran ${rp(amt)} ke uang tumbuh`, amount: amt, step: "investasi", paths: ["resilience.growth", `growth.${ym}`],
+        type: "growth-deposit", label: `Setoran ${rp(amt)} ke tabungan tumbuh`, amount: amt, step: "investasi", paths: ["resilience.growth", `growth.${ym}`],
         apply: () => { r.growth = now + amt; (S.growth ||= {})[ym] = bulanIni + amt; }, msg: `Setoran ${rp(amt)} dicatat` });
     }
     if (cat.kind === "ambil-tumbuh") {
       const now = Number(r.growth) || 0, v = Math.min(amt, now);
-      return commit({ title: `Ambil ${rp(v)} dari uang tumbuh?`, rows: [["Uang tumbuh", rp(now), rp(now - v)]], note: "Mengambil uang tumbuh untuk belanja membuat Step 4 dibuka lagi.",
-        type: "withdraw", label: `Ambil uang tumbuh ${rp(v)}`, amount: v, step: "investasi", paths: ["resilience.growth", "milestones.growthSpent"],
+      return commit({ title: `Ambil ${rp(v)} dari tabungan tumbuh?`, rows: [["Tabungan tumbuh", rp(now), rp(now - v)]], note: "Mengambil tabungan tumbuh untuk belanja membuat Step 4 dibuka lagi.",
+        type: "withdraw", label: `Ambil tabungan tumbuh ${rp(v)}`, amount: v, step: "investasi", paths: ["resilience.growth", "milestones.growthSpent"],
         apply: () => { r.growth = now - v; S.milestones.growthSpent = isoOf(new Date()); }, msg: `Pengambilan ${rp(v)} dicatat` });
     }
     if (cat.kind === "ambil") {
       const now = Number(r.savings) || 0, v = Math.min(amt, now), sah = isEmergencyReason(cat.reason);
       const label = (WITHDRAW_REASONS.find(w => w[0] === cat.reason) || ["", ""])[1];
-      return commit({ title: `Ambil ${rp(v)} dari uang beku?`, rows: [["Uang beku", rp(now), rp(now - v)]],
-        note: amt > now ? `Uang beku hanya ${rp(now)}.` : sah ? "Darurat yang sah. Step tidak mundur, dan skor tidak turun karena ini." : "Bukan darurat. Kalau uang beku turun lama, step bisa dibuka lagi.",
+      return commit({ title: `Ambil ${rp(v)} dari tabungan aman?`, rows: [["Tabungan aman", rp(now), rp(now - v)]],
+        note: amt > now ? `Tabungan aman hanya ${rp(now)}.` : sah ? "Darurat yang sah. Step tidak mundur, dan skor tidak turun karena ini." : "Bukan darurat. Kalau tabungan aman turun lama, step bisa dibuka lagi.",
         type: "withdraw", label: `Ambil ${rp(v)} untuk ${label.toLowerCase()}`, amount: v, step: "tabungan", paths: ["resilience.savings", "withdrawals"],
         apply: () => { r.savings = now - v; (S.withdrawals ||= []).push({ at: new Date().toISOString(), amount: v, reason: cat.reason }); if (sah) S.milestones.refillSince = isoOf(new Date()); },
         msg: `Pengambilan ${rp(v)} dicatat` });
@@ -1329,28 +1397,34 @@
     if (e.target === catatDlg || e.target.closest("[data-cclose]")) return catatDlg.close();
     const t = e.target.closest("button"); if (!t) return;
     const d = t.dataset;
-    if (d.ck) { cat.kind = d.ck; renderCatat(); catatDlg.querySelector("#catat-amt")?.focus(); return; }
-    if (d.ci) { cat.i = Number(d.ci); cat.amt = moneyVal("catat-amt"); renderCatat(); return; }
-    if (d.cr) { cat.reason = d.cr; cat.amt = moneyVal("catat-amt"); renderCatat(); return; }
-    if (d.cg) { cat.goal = d.cg; cat.amt = moneyVal("catat-amt"); renderCatat(); return; }
-    if ("csick" in d) {
-      const list = (S.sick ||= []), open = list.find(z => !z.to);
-      if (open) open.to = isoOf(new Date()); else list.push({ from: isoOf(new Date()), to: "" });
-      save(); catatDlg.close(); render(true); snack(open ? "Mode Sakit diakhiri" : "Mode Sakit dimulai");
-      return;
+    if (d.ctab) { cat.tab = d.ctab; cat.target = ""; cat.reason = ""; renderCatat(); return; }
+    if (d.cpos) { cat.target = d.cpos; if (cat.target !== "beku") cat.reason = ""; renderCatat(); return; }
+    if (d.cr) { cat.reason = d.cr; renderCatat(); return; }
+    if (d.ckey) {
+      if (d.ckey === "back") cat.amt = Math.floor((cat.amt || 0) / 10);
+      else if (d.ckey === "000") cat.amt = Math.min((cat.amt || 0) * 1000, 1e12);
+      else cat.amt = Math.min((cat.amt || 0) * 10 + Number(d.ckey), 1e12);
+      renderCatat(); return;
     }
-    if (d.ca) { $("#catat-amt").value = fmt(Number(d.ca)); return; }
-    if ("cback" in d) { if (cat.direct) return catatDlg.close(); cat.kind = null; renderCatat(); return; }
+    if (d.ca) { cat.amt = Number(d.ca); renderCatat(); return; }
+    if ("cback" in d) { cat.kind = null; renderCatat(); return; }
     if ("cgo" in d) {
-      const amt = moneyVal("catat-amt");
-      if (!amt) return $("#catat-amt").focus();
+      if (!cat.amt) return;
+      // Pilihan di layar diterjemahkan ke jenis catatan lama, supaya submitCatat tidak berubah.
+      cat.kind = catatKind();
+      if (cat.target.startsWith("goal:")) cat.goal = cat.target.slice(5);
+      if (cat.target.startsWith("debt:")) cat.i = Number(cat.target.slice(5));
+      const amt = cat.amt;
       catatDlg.close(); submitCatat(amt);
     }
   });
-  catatDlg.addEventListener("input", (e) => {
-    if (e.target.matches("[data-money]")) { const n = Number(e.target.value.replace(/\D/g, "")) || 0; e.target.value = n ? fmt(n) : ""; }
+  // Papan angka juga bisa dipakai lewat keyboard fisik.
+  catatDlg.addEventListener("keydown", (e) => {
+    if (e.ctrlKey || e.metaKey || e.altKey) return;
+    if (/^[0-9]$/.test(e.key)) { e.preventDefault(); cat.amt = Math.min((cat.amt || 0) * 10 + Number(e.key), 1e12); renderCatat(); return; }
+    if (e.key === "Backspace") { e.preventDefault(); cat.amt = Math.floor((cat.amt || 0) / 10); renderCatat(); return; }
+    if (e.key === "Enter") { e.preventDefault(); catatDlg.querySelector("[data-cgo]:not([disabled])")?.click(); }
   });
-  catatDlg.addEventListener("keydown", (e) => { if (e.key === "Enter" && e.target.matches("#catat-amt")) { e.preventDefault(); catatDlg.querySelector("[data-cgo]")?.click(); } });
   $("#catatBtn").addEventListener("click", () => openCatat());
   $("#demoBtn").addEventListener("click", loadDemo);
 
@@ -1472,7 +1546,7 @@
   function gambarAnalisis(a) {
     const li = (xs) => xs.map(x => `<li>${esc(x)}</li>`).join("");
     const contoh = a._contoh
-      ? `<p class="warn">Ini jawaban contoh, bukan dari Gemini. Server belum punya kunci API.</p>` : "";
+      ? `<p class="warn">Ini jawaban contoh, bukan dari AI. Server belum punya kunci API.</p>` : "";
     return `${contoh}
       <p class="ai-sum">${esc(a.kesimpulan)}</p>
       ${a.peringatan?.length ? `<ul class="ai-warn">${li(a.peringatan)}</ul>` : ""}

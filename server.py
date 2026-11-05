@@ -5,7 +5,7 @@ Mode asli: set LAJU_PROVIDER=live + kunci API, lihat openfinance/live.py.
 
 Kunci API penyedia dan token akses akun hanya ada di server ini; browser
 hanya menerima ringkasan dan daftar transaksi yang sudah diolah.
-Penyimpanan masih di memori (hilang saat server dimatikan) — cukup untuk
+Penyimpanan masih di memori (hilang saat server dimatikan). Cukup untuk
 demo; versi produksi butuh database dengan token terenkripsi.
 """
 from __future__ import annotations

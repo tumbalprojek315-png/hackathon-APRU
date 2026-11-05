@@ -877,11 +877,11 @@
       ? "Saldo di sini tidak diketik langsung. Angkanya ikut catatan setoran dan pengambilan yang Anda buat lewat tombol + Catat."
       : "Laju memisahkan tabungan jadi beberapa pos. Saldonya berubah saat Anda mencatat setoran atau pengambilan di menu + Catat.", `
       ${kunci
-        ? saldoBaca("resilience.savings", "Uang beku (bantalan + dana darurat)", `${beku} ${lewatCatat}`)
-        : field("sav", "Uang beku (bantalan + dana darurat)", money("resilience.savings", "sav"), `${beku} Isi 0 kalau belum ada.`)}
+        ? saldoBaca("resilience.savings", "Tabungan aman (bantalan + dana darurat)", `${beku} ${lewatCatat}`)
+        : field("sav", "Tabungan aman (bantalan + dana darurat)", money("resilience.savings", "sav"), `${beku} Isi 0 kalau belum ada.`)}
       ${kunci
-        ? saldoBaca("resilience.growth", "Uang tumbuh (investasi)", `${tumbuh} ${lewatCatat}`)
-        : field("grw", "Uang tumbuh (investasi)", money("resilience.growth", "grw"), `${tumbuh} Isi 0 kalau belum ada.`)}
+        ? saldoBaca("resilience.growth", "Tabungan tumbuh (investasi)", `${tumbuh} ${lewatCatat}`)
+        : field("grw", "Tabungan tumbuh (investasi)", money("resilience.growth", "grw"), `${tumbuh} Isi 0 kalau belum ada.`)}
       ${goals.length
         ? goals.map(id => kunci
           ? saldoBaca(`resilience.goalData.${id}.saved`, `Tabungan tujuan: ${esc(goalLabel(id))}`, lewatCatat)

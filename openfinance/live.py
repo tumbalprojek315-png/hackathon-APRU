@@ -1,4 +1,4 @@
-"""Penyedia open finance SUNGGUHAN — satu-satunya bagian yang belum bisa diisi.
+"""Penyedia open finance SUNGGUHAN. Satu-satunya bagian yang belum bisa diisi.
 
 Semua lapisan lain (alur izin, callback, sinkronisasi, kategorisasi, skor,
 tampilan) sudah berjalan dan diuji dengan `MockProvider`. Yang tersisa adalah
@@ -9,7 +9,7 @@ Kenapa belum bisa diisi sekarang:
      berlisensi, mis. Brick (onebrick.io) atau Ayoconnect. Biasanya diawali
      akses sandbox, lalu proses KYB/kerja sama sebelum akses produksi.
   2. Nama endpoint, format token, dan field transaksi berbeda di tiap
-     penyedia — harus mengikuti dokumentasi resmi mereka, tidak boleh ditebak.
+     penyedia. Harus mengikuti dokumentasi resmi mereka, tidak boleh ditebak.
   3. Dukungan per e-wallet (GoPay, OVO, DANA, ShopeePay, LinkAja) harus
      dikonfirmasi ke penyedia; isi `supported_wallets` sesuai jawaban mereka.
 

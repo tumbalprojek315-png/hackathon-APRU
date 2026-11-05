@@ -77,6 +77,11 @@
     }
     if (out == null) out = trSentences(core);
     if (out == null) out = trList(core);
+    // Nilai yang diawali pemisah, mis. "· Belum ada": titiknya dilepas dulu lalu dipasang lagi.
+    if (out == null && /^·\s+\S/.test(core)) {
+      const sisa = core.replace(/^·\s+/, ""), r = trOne(sisa) ?? trList(sisa);
+      if (r != null) out = `· ${r}`;
+    }
     if (out == null && onlyNums(core)) out = core.replace(TOKEN, enTok);   // hanya angka/uang/tanggal
     return out == null ? text : lead + out + tail;
   }

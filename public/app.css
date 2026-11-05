@@ -320,7 +320,6 @@ body.app main { padding: 8px 0 72px; }
 .journey li > span:last-child { display: flex; flex-direction: column; padding-top: 4px; }
 .journey b { font-size: .88rem; }
 .journey small { color: var(--muted-fg); font-size: .76rem; }
-.ai-json { margin: 10px 0 0; padding: 12px; border-radius: .9rem; background: var(--secondary); font-size: .7rem; line-height: 1.45; max-height: 360px; overflow: auto; white-space: pre; }
 .mrow.rapor .mnum { background: var(--primary); color: var(--primary-fg); }
 .mrow.rapor .mnum svg { width: 16px; height: 16px; }
 
@@ -421,8 +420,6 @@ body.no-fab .bottomnav { display: none; }
 .dl.up { background: color-mix(in oklab, var(--st-good) 18%, var(--card)); color: var(--st-good-ink); }
 .dl.down { background: color-mix(in oklab, var(--st-critical) 14%, var(--card)); color: var(--st-critical-ink); }
 .dl.same { color: var(--muted-fg); }
-.ai-card summary { cursor: pointer; font-weight: 700; font-size: .88rem; }
-.ai-card summary small { font-weight: 500; color: var(--muted-fg); }
 
 
 /* Profil: ikon berwarna per bagian supaya cepat dikenali */
@@ -440,8 +437,43 @@ body.no-fab .bottomnav { display: none; }
 .ic-tujuan { background: color-mix(in oklab, var(--st-warn) 26%, var(--card)); color: var(--st-warn-ink); }
 .prow-txt b { font-size: 1rem; font-weight: 800; }
 .prow-txt small { font-size: .82rem; color: var(--fg); opacity: .7; }
-.ai-card > summary { display: block; }
-.ai-card > summary small { display: block; margin-top: 2px; }
+/* Step 2: pemisahan utang wajib dan utang yang boleh jalan terus. */
+.duty-list { display: grid; gap: 10px; }
+.duty-list.muted { padding-top: 14px; border-top: 1px solid var(--border); }
+.duty-list .lbl { font-size: .7rem; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; color: var(--muted-fg); margin: 0; }
+.duty-row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.duty-txt { flex: 1; min-width: 150px; display: grid; gap: 2px; }
+.duty-txt small { font-size: .82rem; color: var(--muted-fg); }
+.duty-txt .tag { justify-self: start; }
+
+/* ---------- Catat: satu layar dengan papan angka ---------- */
+.catat-sheet { gap: 14px; }
+.catat-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.catat-head h2 { margin: 0; }
+.catat-head .icon-btn { margin: 0; flex: none; }
+
+.seg { display: flex; gap: 4px; padding: 4px; border-radius: 99px; background: var(--secondary); }
+.seg-opt { flex: 1; min-width: 0; border: 0; background: none; border-radius: 99px; padding: 9px 8px;
+  font: inherit; font-size: .82rem; font-weight: 700; color: var(--muted-fg); cursor: pointer; }
+.seg-opt[aria-pressed="true"] { background: var(--card); color: var(--fg); box-shadow: 0 1px 3px rgb(0 0 0 / .08); }
+
+.catat-amt { display: flex; align-items: baseline; justify-content: center; gap: 6px; margin: 2px 0; }
+.catat-amt span { font-size: 1.1rem; font-weight: 700; color: var(--muted-fg); }
+.catat-amt b { font-size: 2.4rem; font-weight: 800; line-height: 1.1; letter-spacing: -.02em; }
+.catat-amt b.nol { color: var(--muted-fg); opacity: .45; }
+
+.keypad { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.key { border: 0; border-radius: 1rem; background: var(--secondary); padding: 14px 0; font: inherit;
+  font-size: 1.25rem; font-weight: 700; color: var(--fg); cursor: pointer; display: grid; place-items: center; }
+.key:hover { background: color-mix(in oklab, var(--fg) 8%, var(--secondary)); }
+.key:active { transform: scale(.97); }
+.key svg { width: 22px; height: 22px; }
+
+.catat-pos { display: grid; gap: 8px; }
+.catat-pos .lbl { font-size: .7rem; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; color: var(--muted-fg); margin: 0; }
+.catat-pos .chip small { font-weight: 600; opacity: .7; margin-left: 4px; }
+.btn.grow { flex: 1; }
+
 /* Penanda tercapai: menimpa sudut kartu, isi kartu tetap terbaca. */
 .done-card { position: relative; border-color: var(--st-good); }
 .done-ribbon { position: absolute; top: -11px; right: 16px; z-index: 1; display: inline-flex; align-items: center; gap: 6px;
