@@ -89,6 +89,7 @@
   // Semua ambang di satu tempat supaya tim mudah mengubahnya.
   const MILESTONE = {
     STEP1_MIN_NET_RATIO: 0.05,
+    STEP1_PROOF_DAYS: 30,        // umur maksimal bukti (e-wallet tersinkron atau e statement) untuk lulus Step 1
     STEP2_BUFFER_TARGET: 3000000,
     STEP2_BUFFER_REGRESS: 2000000,
     STEP2_SPLIT_DEBT: 0.70,
@@ -177,7 +178,7 @@
   });
 
   let S = load();
-  const ui = { showErrors: false, analysisIdx: 0, analysisTimer: null, showPw: false, config: null, server: "checking", syncing: {}, walletError: "", openTx: null, docName: "", docError: "", docBusy: "", stBusy: {}, combo: { open: false, active: -1, items: [] }, cal: null, adder: {}, enter: true };
+  const ui = { showErrors: false, analysisIdx: 0, analysisTimer: null, showPw: false, config: null, server: "checking", syncing: {}, walletError: "", openTx: null, docName: "", docError: "", docBusy: "", stBusy: {}, proofName: "", proofError: "", proofBusy: false, combo: { open: false, active: -1, items: [] }, cal: null, adder: {}, enter: true };
 
   function load() {
     try {
@@ -333,10 +334,10 @@
     calendar: '<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="18" rx="3"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>',
   };
   const ST_ICON = {
-    good: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="m8 12 3 3 5-6"/></svg>',
-    warn: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M12 7v6m0 4h.01"/></svg>',
-    serious: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m21.7 18-8-14a2 2 0 0 0-3.4 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.7-3Z"/><path d="M12 9v4m0 4h.01"/></svg>',
-    critical: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="m15 9-6 6m0-6 6 6"/></svg>',
+    good: '<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="m8 12 3 3 5-6"/></svg>',
+    warn: '<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M12 7v6m0 4h.01"/></svg>',
+    serious: '<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m21.7 18-8-14a2 2 0 0 0-3.4 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.7-3Z"/><path d="M12 9v4m0 4h.01"/></svg>',
+    critical: '<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="m15 9-6 6m0-6 6 6"/></svg>',
   };
   const statusPill = (id, label) => `<span class="st ${id}">${ST_ICON[id]}${label}</span>`;
   const band = (s) => BANDS.find(b => s >= b.from && s < b.to) || BANDS[0];
@@ -1392,6 +1393,24 @@ income: { perPlatform: { gojek: 160000, grab: 110000 }, bonus: 400000, tips: 150
     return { net: c.income - c.expense, income: c.income, source: "isian" };
   }
 
+  // Bukti terbaru yang menopang hitungan Step 1. E-wallet terhubung dinilai dari kapan terakhir
+  // disinkronkan, e statement dari tanggal akhir periodenya. Jalur manual memakai jalur kedua,
+  // jadi dokumennya perlu diunggah lagi tiap 30 hari supaya hitungannya tetap berdasar data nyata.
+  function latestProof() {
+    const today = isoOf(new Date());
+    let best = null;
+    for (const w of S.wallets) {
+      if (!w.summary || !isEvidence(w)) continue;
+      const doc = w.source === "statement";
+      const at = doc ? (w.period?.to || "") : String(w.syncedAt || "").slice(0, 10);
+      if (!at) continue;
+      if (!best || at > best.at) best = { at, doc, name: w.accountName || walletMeta(w.walletId)?.label || w.walletId };
+    }
+    if (!best) return { ok: false, at: null, age: null, doc: false, name: "", has: false };
+    const age = Math.max(0, daysBetween(best.at, today));
+    return { ...best, age, has: true, ok: age <= MILESTONE.STEP1_PROOF_DAYS };
+  }
+
   const frozenMoney = () => Number(S.resilience.savings) || 0;          // bantalan Step 2 + dana darurat Step 3
   const growthMoney = () => Number(S.resilience.growth) || 0;           // uang tumbuh Step 4
 
@@ -1442,7 +1461,13 @@ income: { perPlatform: { gojek: 160000, grab: 110000 }, bonus: 400000, tips: 150
     const wajib = goalsOf("wajib"), tumbuh = goalsOf("tumbuh");
     return {
       data: { met: !!S.finished, regress: false },
-      minus: { met: t.rolling.net >= MILESTONE.STEP1_MIN_NET_RATIO * t.rolling.income, regress: t.rolling.net < 0 && !sickNow() },
+      // Step 1 butuh dua hal: sisa uangnya cukup, dan ada bukti 30 hari terakhir yang menopang angkanya.
+      // Bukti yang basi tidak memundurkan step yang sudah selesai, hanya menahan step yang belum.
+      minus: (() => {
+        const netOk = t.rolling.net >= MILESTONE.STEP1_MIN_NET_RATIO * t.rolling.income;
+        const proof = latestProof();
+        return { netOk, proof, met: netOk && proof.ok, regress: t.rolling.net < 0 && !sickNow() };
+      })(),
       bantalan: { met: frozen >= t.buffer && high === 0, low: frozen < MILESTONE.STEP2_BUFFER_REGRESS },
       darurat: { met: frozen >= t.dd, low: frozen < MILESTONE.STEP3_REGRESS_RATIO * t.dd },
       investasi: { met: inv.done, inv, regress: !!S.milestones.growthSpent },
@@ -1569,13 +1594,21 @@ income: { perPlatform: { gojek: 160000, grab: 110000 }, bonus: 400000, tips: 150
       {
         id: "minus", number: 1, title: "Keluar dari minus", pillar: "Arus kas", tool: "cashflow",
         caption: `Sisa uang 30 hari minimal ${pct(MILESTONE.STEP1_MIN_NET_RATIO)} dari pendapatan.`,
-        explain: `sisa 30 hari ÷ (${pct(MILESTONE.STEP1_MIN_NET_RATIO)} × pendapatan).`,
-        progress: t.rolling.income > 0 ? Math.round((t.rolling.net / (MILESTONE.STEP1_MIN_NET_RATIO * t.rolling.income)) * 100) : 0,
+        explain: `${pct(0.8)} dari sisa 30 hari ÷ (${pct(MILESTONE.STEP1_MIN_NET_RATIO)} × pendapatan), ${pct(0.2)} dari bukti 30 hari terakhir.`,
+        progress: Math.round(0.8 * (t.rolling.income > 0 ? Math.min(100, (t.rolling.net / (MILESTONE.STEP1_MIN_NET_RATIO * t.rolling.income)) * 100) : 0) + (rules.minus.proof.ok ? 20 : 0)),
         cur: { label: `Sisa 30 hari (${t.rolling.source})`, value: rp(t.rolling.net) },
         tgt: { label: "Target", value: rp(Math.round(MILESTONE.STEP1_MIN_NET_RATIO * t.rolling.income)) },
-        gap: rules.minus.met ? "" : `Tambah ${rp(Math.round(MILESTONE.STEP1_MIN_NET_RATIO * t.rolling.income) - t.rolling.net)} per 30 hari`,
+        gap: rules.minus.met ? ""
+          : !rules.minus.netOk ? `Tambah ${rp(Math.round(MILESTONE.STEP1_MIN_NET_RATIO * t.rolling.income) - t.rolling.net)} per 30 hari`
+          : rules.minus.proof.has ? `Bukti terakhir sudah ${rules.minus.proof.age} hari. Unggah e statement terbaru.`
+          : "Unggah e statement 30 hari terakhir",
         bar: { kind: "fill", cur: Math.max(0, t.rolling.net), tgt: Math.max(1, Math.round(MILESTONE.STEP1_MIN_NET_RATIO * t.rolling.income)), curLabel: "Sisa", tgtLabel: "Target", fmt: rp },
-        criteria: [{ label: `Sisa 30 hari ≥ ${pct(MILESTONE.STEP1_MIN_NET_RATIO)} pendapatan`, met: rules.minus.met, value: rp(t.rolling.net) }],
+        criteria: [
+          { label: `Sisa 30 hari ≥ ${pct(MILESTONE.STEP1_MIN_NET_RATIO)} pendapatan`, met: rules.minus.netOk, value: rp(t.rolling.net) },
+          { label: `Bukti tidak lebih tua dari ${MILESTONE.STEP1_PROOF_DAYS} hari`, met: rules.minus.proof.ok,
+            value: rules.minus.proof.has ? `${rules.minus.proof.name} · ${rules.minus.proof.age} hari lalu` : "Belum ada" },
+        ],
+        proof: rules.minus.proof,
         short: t.rolling.net < 0 ? `Kurang ${rpShort(-t.rolling.net)}` : `Sisa ${rpShort(t.rolling.net)}`,
         sick: sickNow(),
       },
@@ -1618,7 +1651,7 @@ income: { perPlatform: { gojek: 160000, grab: 110000 }, bonus: 400000, tips: 150
         bar: { kind: "fill", cur: inv.streak, tgt: MILESTONE.STEP4_STREAK_MONTHS, curLabel: "Beruntun", tgtLabel: "Target", fmt: (v) => `${Math.round(v)} bln` },
         criteria: [{ label: `Setoran ≥ ${rp(t.invest)} selama ${MILESTONE.STEP4_STREAK_MONTHS} bulan beruntun`, met: inv.done, value: `${inv.streak} bulan` }],
         warn: t.rolling.net < t.invest ? `Sisa uang Anda ${rp(t.rolling.net)} per bulan, masih di bawah ${rp(t.invest)}. Naikkan sisa uang dulu sebelum step ini.` : "",
-        thisMonth: inv.thisMonth, target: t.invest, pot: "growth",
+        thisMonth: inv.thisMonth, target: t.invest, pot: "growth", streak: inv.streak,
         short: `${inv.streak} dari ${MILESTONE.STEP4_STREAK_MONTHS} bulan`,
       },
       {

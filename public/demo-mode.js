@@ -31,11 +31,25 @@
 
   const view = (rec, at) => ({ ...rec, linkedAt: at, syncedAt: at });
 
+  // Periode e statement contoh digeser supaya berakhir hari ini. Tanggal di demo-data.json tetap,
+  // jadi tanpa geseran ini dokumennya terlihat makin tua dan bukti Step 1 ikut kedaluwarsa.
+  function freshStatement(at) {
+    const s = data.statement, p = s.period || {};
+    if (!p.from || !p.to) return { ...s, linkedAt: at, syncedAt: at };
+    const hari = 864e5, d = new Date(at);
+    // Dua sisi dihitung dari tengah malam UTC supaya selisihnya bilangan hari bulat, tidak meleset sehari.
+    const hariIni = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+    const geser = Math.round((Date.parse(hariIni + "T00:00:00Z") - Date.parse(p.to + "T00:00:00Z")) / hari);
+    if (geser <= 0) return { ...s, linkedAt: at, syncedAt: at };
+    const maju = (iso) => new Date(Date.parse(iso + "T00:00:00Z") + geser * hari).toISOString().slice(0, 10);
+    return { ...s, linkedAt: at, syncedAt: at, period: { from: maju(p.from), to: maju(p.to) } };
+  }
+
   function walletList() {
     const L = linked(), out = [];
     for (const [id, at] of Object.entries(L)) if (data.wallets[id]) out.push(view(data.wallets[id], at));
     const sname = store(SKEY);
-    if (sname) out.push({ ...data.statement, linkedAt: sname.at, syncedAt: sname.at });
+    if (sname) out.push(freshStatement(sname.at));
     return out;
   }
 
@@ -75,7 +89,7 @@
     if (method === "POST" && p === "/api/statements/sample") {
       await wait(400);
       const at = now(); put(SKEY, { at });
-      return { ...data.statement, linkedAt: at, syncedAt: at };
+      return freshStatement(at);
     }
     if (method === "POST" && p === "/api/statements/upload") {
       fail("need_server", "Membaca PDF asli butuh server Laju. Di mode contoh, pakai tombol Pakai contoh.");

@@ -406,6 +406,8 @@
       </div>
       <div class="stack">
         ${goalCard(m)}
+        ${proofCard(m)}
+        ${sampleCard(m)}
         ${lane.active && !lane.done && m.tool !== "debtgoal" ? laneMini(lane) : ""}
         ${updateCard(m)}
         ${planCard(m)}
@@ -413,6 +415,140 @@
         ${pager(m)}
       </div>`;
   }
+
+  // ---------- Step 1: bukti 30 hari terakhir ----------
+  // Jalur e-wallet membuktikan sendiri lewat sinkronisasi. Jalur manual membuktikan dengan
+  // mengunggah e statement, dan dokumen itu perlu diperbarui tiap 30 hari supaya Step 1 bisa lulus.
+  function proofCard(m) {
+    if (m.id !== "minus") return "";
+    const p = m.proof || {};
+    const bisaUnggah = ui.server !== "down" && !ui.config?.demo;
+    const bisaContoh = bisaSampel();
+    const err = ui.proofError ? `<div class="note danger" role="alert">${ICON.alert}<span>${esc(ui.proofError)}</span></div>` : "";
+    const busy = ui.proofBusy ? `<div class="note"><span class="spinner" aria-hidden="true"></span><span>Membaca dokumen…</span></div>` : "";
+
+    // Dipakai .done-line dan .ew-partial, bukan .note, supaya status ini tidak dilipat jadi tombol Info.
+    // Nama dompet dipisah dengan " · " supaya i18n bisa menerjemahkan sisanya dan membiarkan namanya.
+    const status = p.ok
+      ? `<div class="done-line"><span class="dot">${ICON.check}</span>Bukti terbaru · ${esc(p.name)} · ${p.age} hari lalu. Hitungan sisa 30 hari memakai transaksi asli.</div>`
+      : p.has
+        ? `<div class="ew-partial" role="status">${ICON.info}<span>Bukti terakhir · ${esc(p.name)} · ${p.age} hari. Unggah e statement terbaru supaya hitungannya kembali berdasar transaksi asli.</span></div>`
+        : `<div class="ew-partial" role="status">${ICON.info}<span>Belum ada bukti. Sisa 30 hari masih dihitung dari isian Anda sendiri, jadi Step 1 belum bisa dinyatakan selesai.</span></div>`;
+
+    return `<section class="card" aria-labelledby="proof-h">
+      <div class="card-head"><h2 id="proof-h">Bukti 30 hari terakhir</h2><p>Unggah e statement tiap 30 hari supaya sisa uang Anda terbukti dari transaksi, bukan perkiraan.</p></div>
+      ${err}${busy}${status}
+      <div class="field"><label for="proof-name">Nama rekening atau dompet</label>
+        <input class="input" id="proof-name" type="text" maxlength="40" autocomplete="off" placeholder="misal: BCA, SeaBank, JOJO" value="${esc(ui.proofName || "")}"></div>
+      <input type="file" id="proof-file" accept="application/pdf,.pdf" hidden>
+      <div class="chips">
+        ${bisaUnggah ? `<label class="btn secondary sm" for="proof-file">${ICON.plus} Pilih berkas PDF</label>` : ""}
+        ${bisaContoh ? `<button type="button" class="btn secondary sm" data-act="proof-sample">Pakai e statement contoh</button>` : ""}
+      </div>
+      <p class="hint">${bisaUnggah
+        ? "Laju hanya membaca baris mutasinya. Berkasnya tidak disimpan."
+        : "Tanpa server Laju, PDF asli belum bisa dibaca. Tombol Pakai data contoh memperlihatkan hasilnya."}</p>
+    </section>`;
+  }
+
+  const toB64 = (buf) => { const b = new Uint8Array(buf); let out = ""; for (let i = 0; i < b.length; i += 0x8000) out += String.fromCharCode.apply(null, b.subarray(i, i + 0x8000)); return btoa(out); };
+  const proofName = () => ($("#proof-name")?.value || ui.proofName || "").trim();
+
+  async function sendProof(path, body) {
+    if (ui.proofBusy) return;
+    ui.proofBusy = true; ui.proofError = ""; render(true);
+    try {
+      const { others, ...view } = await api(path, { method: "POST", body });
+      for (const v of others || []) {
+        const j = S.wallets.findIndex(w => w.walletId === v.walletId);
+        if (j >= 0 && v.summary) S.wallets[j] = { ...v, stale: false };
+      }
+      const i = S.wallets.findIndex(w => w.walletId === view.walletId);
+      i >= 0 ? (S.wallets[i] = view) : S.wallets.push(view);
+      ui.proofName = "";
+      snack(`${view.accountName} terbaca · ${view.summary.txCount} transaksi`);
+    } catch (e) {
+      ui.proofError = e.message;
+    } finally {
+      ui.proofBusy = false; save(); render(true);
+    }
+  }
+
+  // ---------- Data contoh per step ----------
+  // Mengisi angka paling kecil yang membuat syarat step terpenuhi, supaya alur prototipe bisa
+  // dijalankan sampai habis tanpa menunggu setoran sungguhan atau masa bertahan 28 hari.
+  // Hanya disembunyikan kalau server memang memakai penyedia asli. Saat config belum termuat
+  // atau server mati, tombolnya tetap ada supaya alur contoh tidak pernah buntu.
+  const bisaSampel = () => (ui.config?.mode ?? "simulasi") !== "live";
+
+  function sampleFor(m) {
+    const today = isoOf(new Date()), st = (S.milestones.st ||= {});
+    // Masa bertahan dimundurkan, kalau tidak Step 2 dan 3 menunggu 28 hari sebelum jadi selesai.
+    const lewatiMasaBertahan = (id) => {
+      const e = (st[id] ||= { status: "", since: today });
+      const d = new Date(); d.setDate(d.getDate() - (MILESTONE.HOLD_DAYS + 1));
+      e.holdFrom = isoOf(d); delete e.lowSince;
+    };
+    if (m.tool === "cashflow") {
+      // Angka di kartu "Angka yang dipakai" ditulis ulang lewat overrides, supaya sisa 30 hari
+      // jelas di atas ambang 5 persen dan pengguna bisa melihat angka barunya.
+      const c = m.x.c;
+      const income = Math.max(Math.round(c.income), 3000000);
+      const rutin = Math.max(0, Math.round((income * 0.8 - c.debtMonthly) / 1000) * 1000);
+      S.overrides = { ...(S.overrides || {}), income, expense: rutin };
+      return `Pendapatan ${rp(income)}, pengeluaran rutin ${rp(rutin)}`;
+    }
+    if (m.tool === "buffer") {
+      const target = Math.max(0, m.target || 0);
+      S.resilience.savings = Math.max(frozenMoney(), Math.ceil((target * 1.05) / 1000) * 1000);
+      let lunas = 0;
+      if (m.id === "bantalan") for (const d of S.debts || []) {
+        if ((HIGH_COST.includes(d.type) || Number(d.rate) >= 2) && Number(d.remaining) > 0) { d.remaining = 0; lunas++; }
+      }
+      lewatiMasaBertahan(m.id);
+      return `Uang beku diisi ${rp(S.resilience.savings)}${lunas ? ` · ${lunas} utang bunga tinggi ditandai lunas` : ""}`;
+    }
+    if (m.tool === "growth") {
+      const v = Math.max(Math.round(m.target || 0), 50000), g = (S.growth ||= {});
+      for (let i = 0; i <= MILESTONE.STEP4_STREAK_MONTHS; i++) { const d = new Date(); d.setMonth(d.getMonth() - i); g[ymOf(d)] = v; }
+      S.resilience.growth = Math.max(growthMoney(), v * MILESTONE.STEP4_STREAK_MONTHS);
+      delete S.milestones.growthSpent;
+      return `Setoran uang tumbuh ${rp(v)} diisi ${MILESTONE.STEP4_STREAK_MONTHS} bulan terakhir`;
+    }
+    if (m.tool === "goals") {
+      const gd = (S.resilience.goalData ||= {});
+      let list = (S.resilience.goals || []).filter(id => goalGroup(id) === "tumbuh");
+      if (!list.length) {
+        const add = GOALS.find(g => g.group === "tumbuh");
+        S.resilience.goals = [...(S.resilience.goals || []), add.id];
+        list = [add.id];
+      }
+      for (const id of list) {
+        const e = (gd[id] ||= {});
+        e.amount = Number(e.amount) > 0 ? Number(e.amount) : 5000000;
+        e.saved = e.amount;
+      }
+      return `Tabungan tujuan ${list.map(goalLabel).join(", ")} dipenuhi`;
+    }
+    return "";
+  }
+
+  // Kartu data contoh: hanya untuk step yang syaratnya berupa angka di aplikasi.
+  // Step 1 punya tombolnya sendiri di kartu bukti, karena di sana yang diisi adalah e statement.
+  function sampleCard(m) {
+    if (!bisaSampel() || m.id === "data") return "";
+    const sudah = m.status === "selesai";
+    return `<section class="card${sudah ? " done-card" : ""}" aria-labelledby="smp-h">
+      ${sudah ? doneRibbon("Syarat terpenuhi") : ""}
+      <div class="card-head"><h2 id="smp-h">Data contoh</h2><p>Mengisi angka paling kecil yang membuat step ini selesai, untuk mencoba alurnya.</p></div>
+      <div class="chips"><button type="button" class="btn sm" data-act="step-sample">${sudah ? "Isi ulang data contoh" : "Pakai data contoh"}</button></div>
+      <p class="hint">Angka ini hanya contoh. Hapus lewat tombol Reset di Profil kalau ingin mulai dari nol.</p>
+    </section>`;
+  }
+
+  // Penanda "tercapai" yang menimpa sudut kartu. Dipakai supaya angka di kartu tetap terbaca,
+  // bukan diganti satu centang besar.
+  const doneRibbon = (text = "Target tercapai") => `<span class="done-ribbon">${ST_ICON.good}${esc(text)}</span>`;
 
   // Target: sekarang vs target dengan kontras jelas + syarat selesai
   function goalCard(m) {
@@ -495,7 +631,7 @@
       const now = frozenMoney();
       return `<section class="card" aria-labelledby="upd-h">
         <div class="card-head"><h2 id="upd-h">Uang beku: ${rp(now)}</h2><p>Satu saldo untuk bantalan Step 2 dan dana darurat Step 3.</p></div>
-        ${m.checkpoints ? `<ul class="ckpts">${m.checkpoints.map(k => `<li class="${k.met ? "met" : ""}"><span class="ci">${k.met ? ST_ICON.good : IC.circle}</span><span>${k.label}</span></li>`).join("")}</ul>` : ""}
+        ${m.checkpoints ? `<ul class="checkpoints">${m.checkpoints.map(k => `<li class="${k.met ? "met" : ""}"><span class="ci">${k.met ? ST_ICON.good : IC.circle}</span><span>${k.label}</span></li>`).join("")}</ul>` : ""}
         <div class="chips">
           <button type="button" class="btn sm" data-act="catat" data-kind="setor">${ICON.plus} Setor</button>
           ${now > 0 ? `<button type="button" class="btn sm secondary" data-act="catat" data-kind="ambil">Ambil</button>` : ""}
@@ -583,7 +719,17 @@
     if (m.tool === "buffer") {
       const now = frozenMoney(), target = m.target || 0, gap = target - now;
       if (!target) return "";
-      if (gap <= 0) return card("Rencana", "", `<div class="note">${ST_ICON.good}<span>Target tercapai. Lanjut ke step berikutnya.</span></div>`);
+      // Target tercapai: angkanya tetap ditampilkan, hanya diberi penanda yang menimpa kartu.
+      if (gap <= 0) return `<section class="card viz-card done-card" aria-labelledby="plan-h">
+        ${doneRibbon()}
+        <div class="card-head"><h2 id="plan-h">Rencana setoran</h2><p>Target sudah terpenuhi. Angkanya tetap ditampilkan.</p></div>
+        <dl class="kv-list">
+          <div><dt>Uang beku sekarang</dt><dd class="num">${rp(now)}</dd></div>
+          <div><dt>Target step ini</dt><dd class="num">${rp(target)}</dd></div>
+          <div><dt>Lebih dari target</dt><dd class="num">${rp(now - target)}</dd></div>
+        </dl>
+        ${goalBar({ kind: "fill", cur: now, tgt: target, curLabel: "Uang beku", tgtLabel: "Target", fmt: rp })}
+      </section>`;
       const r = perDayRange(c);
       const perDay = clamp(sim[m.id]?.perday ?? S.milestones.plans[m.id]?.perDay ?? defaultPerDay(x, m), r.min, r.max);
       return `<section class="card viz-card" aria-labelledby="plan-h">
@@ -600,9 +746,16 @@
     if (m.tool === "growth") {
       const gapM = Math.max(0, m.target - (m.thisMonth || 0));
       const perDay = Math.round(gapM / (S.profile.daysPerWeek * WEEKS) / 500) * 500;
-      return card("Rencana", "", gapM > 0
-        ? `<p class="plan-big">Setor lagi <b>${rp(gapM)}</b> bulan ini</p><p class="hint" style="font-size:.88rem">= sekitar <b>${rp(perDay)}</b> setiap hari narik. Setoran yang Anda catat bulan ini ikut dihitung untuk hitungan beruntun.</p>`
-        : `<div class="note">${ST_ICON.good}<span>Target bulan ini sudah tercapai. Pertahankan ${MILESTONE.STEP4_STREAK_MONTHS} bulan berturut-turut.</span></div>`);
+      if (gapM > 0) return card("Rencana", "", `<p class="plan-big">Setor lagi <b>${rp(gapM)}</b> bulan ini</p><p class="hint" style="font-size:.88rem">= sekitar <b>${rp(perDay)}</b> setiap hari narik. Setoran yang Anda catat bulan ini ikut dihitung untuk hitungan beruntun.</p>`);
+      return `<section class="card done-card" aria-labelledby="plan-h">
+        ${doneRibbon("Bulan ini tercapai")}
+        <div class="card-head"><h2 id="plan-h">Rencana</h2><p>Pertahankan ${MILESTONE.STEP4_STREAK_MONTHS} bulan berturut-turut.</p></div>
+        <dl class="kv-list">
+          <div><dt>Setoran bulan ini</dt><dd class="num">${rp(m.thisMonth || 0)}</dd></div>
+          <div><dt>Target per bulan</dt><dd class="num">${rp(m.target)}</dd></div>
+          <div><dt>Bulan beruntun</dt><dd class="num">${m.streak || 0} dari ${MILESTONE.STEP4_STREAK_MONTHS}</dd></div>
+        </dl>
+      </section>`;
     }
     if (m.tool === "goals") {
       const late = (m.goals || []).filter(id => {
@@ -991,6 +1144,19 @@
         save(); render(true); return snack("Rencana disimpan");
       }
       case "save-lane": S.milestones.plans.lane = { extra: Number($("#sim-extra").value) }; save(); render(true); return snack("Rencana pelunasan disimpan");
+      case "proof-sample": ui.proofName = proofName(); sendProof("/api/statements/sample", { name: proofName() || "JOJO" }); return;
+      case "step-sample": {
+        if (!m) return;
+        const before = health(calc()).total;
+        const pesan = sampleFor(m);
+        if (!pesan) return snack("Step ini tidak punya data contoh.");
+        save(); render(true);
+        const after = health(calc()).total;
+        snack(`${pesan}${after !== before ? ` · Skor ${before} → ${after}` : ""}`);
+        // Step 1 juga butuh bukti 30 hari, jadi e statement contoh ikut diambil kalau belum ada.
+        if (m.id === "minus" && !currentStep()?.proof?.ok) sendProof("/api/statements/sample", { name: proofName() || "JOJO" });
+        return;
+      }
     }
   }
 
@@ -1227,8 +1393,21 @@
       ev.target.closest(".adder-row, .field, .card")?.querySelector("[data-act]")?.click();
     }
   });
+  // Berkas PDF untuk bukti Step 1: dibaca di browser, dikirim sebagai base64 ke server.
+  view.addEventListener("change", (ev) => {
+    const el = ev.target;
+    if (el.id !== "proof-file" || !el.files?.length) return;
+    const f = el.files[0];
+    el.value = "";
+    ui.proofName = proofName();
+    if (!/\.pdf$/i.test(f.name)) { ui.proofError = "Hanya berkas PDF yang bisa dibaca."; render(true); return; }
+    if (f.size > 5e6) { ui.proofError = "Berkas terlalu besar. Maksimal 5 MB."; render(true); return; }
+    f.arrayBuffer().then(buf => sendProof("/api/statements/upload",
+      { name: proofName() || f.name.replace(/\.pdf$/i, "").slice(0, 40), filename: f.name, data: toB64(buf) }));
+  });
   view.addEventListener("input", (ev) => {
     const el = ev.target;
+    if (el.id === "proof-name") { ui.proofName = el.value; return; }
     if (el.matches("[data-money]")) { const n = Number(el.value.replace(/\D/g, "")) || 0; el.value = n ? fmt(n) : ""; return; }
     if (!el.dataset.sim) return;
     const v = Number(el.value), { id } = route();
@@ -1280,6 +1459,7 @@
     try { const f = sessionStorage.getItem("laju-flash"); if (f) { sessionStorage.removeItem("laju-flash"); snack(f); } } catch (e) { /* abaikan */ }
     try {   // segarkan ringkasan e-wallet dari server bila tersedia
       ui.config = await api("/api/config");
+      render(true);   // sebagian kartu bergantung pada config (mis. tombol data contoh di Step 1)
       const { wallets } = await api("/api/wallets");
       if (wallets.length || S.wallets.length) {
         const m = mergeServerWallets(wallets);

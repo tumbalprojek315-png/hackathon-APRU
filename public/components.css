@@ -316,6 +316,12 @@ details.cf-calc[open] summary::after { transform: translateY(1px) rotate(-135deg
 .info-pop p { margin: 0; }
 .info-pop .tag { margin-right: 6px; }
 /* catatan berisi tombol aksi / satu-satunya isi kartu: teks ringan, tanpa kotak */
+/* Saldo yang hanya bisa dibaca: diubah lewat tombol Catat, bukan diketik di Profil. */
+.saldo-ro { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin: 0; padding: 12px 14px;
+  border-radius: 1rem; background: var(--secondary); }
+.saldo-ro b { font-size: 1.1rem; font-weight: 800; }
+
+.note svg { width: 18px; height: 18px; flex: none; margin-top: 1px; }
 .note.inline, .note.plain { background: none; padding: 0; border-radius: 0; }
 .note.inline.accent { color: var(--fg); }
 .note.plain { color: var(--fg); font-size: .86rem; }

@@ -860,12 +860,32 @@
     return notes.map(t => `<div class="ew-partial" role="status">${ICON.info}<span>${t}</span></div>`).join("");
   }
 
+  // Saldo hanya bisa diketik sekali, saat onboarding. Sesudah itu saldo berubah lewat tombol Catat,
+  // supaya setiap perubahan punya catatan yang bisa diurungkan dan tidak bisa ditimpa diam diam.
+  const saldoBaca = (path, label, hint) =>
+    `<div class="field"><span class="lbl">${label}</span>
+      <p class="saldo-ro"><b class="num">${rp(Number(get(path)) || 0)}</b><span class="tag">Dari catatan</span></p>
+      <span class="hint">${hint}</span></div>`;
+
   function savingsCard() {
     const r = S.resilience, goals = r.goals || [];
-    return card("Tabungan Anda", "Laju memisahkan tabungan jadi beberapa pos. Saldonya berubah saat Anda mencatat setoran atau pengambilan di menu + Catat.", `
-      ${field("sav", "Uang beku (bantalan + dana darurat)", money("resilience.savings", "sav"), "Satu saldo untuk Step 2 dan Step 3. Untuk keadaan mendadak: servis, berobat, order sepi. Isi 0 kalau belum ada.")}
-      ${field("grw", "Uang tumbuh (investasi)", money("resilience.growth", "grw"), "Uang yang ditanam supaya bertumbuh, bukan untuk dipakai. Isi 0 kalau belum ada.")}
-      ${goals.length ? goals.map(id => field(`gs-${id}`, `Tabungan tujuan: ${esc(goalLabel(id))}`, money(`resilience.goalData.${id}.saved`, `gs-${id}`), "Isi 0 kalau belum ada.")).join("")
+    const kunci = !!ui.edit;   // true saat dibuka dari Profil, false saat onboarding pertama
+    const beku = "Satu saldo untuk Step 2 dan Step 3. Untuk keadaan mendadak: servis, berobat, order sepi.";
+    const tumbuh = "Uang yang ditanam supaya bertumbuh, bukan untuk dipakai.";
+    const lewatCatat = "Ubah lewat tombol + Catat di tengah bawah layar.";
+    return card("Tabungan Anda", kunci
+      ? "Saldo di sini tidak diketik langsung. Angkanya ikut catatan setoran dan pengambilan yang Anda buat lewat tombol + Catat."
+      : "Laju memisahkan tabungan jadi beberapa pos. Saldonya berubah saat Anda mencatat setoran atau pengambilan di menu + Catat.", `
+      ${kunci
+        ? saldoBaca("resilience.savings", "Uang beku (bantalan + dana darurat)", `${beku} ${lewatCatat}`)
+        : field("sav", "Uang beku (bantalan + dana darurat)", money("resilience.savings", "sav"), `${beku} Isi 0 kalau belum ada.`)}
+      ${kunci
+        ? saldoBaca("resilience.growth", "Uang tumbuh (investasi)", `${tumbuh} ${lewatCatat}`)
+        : field("grw", "Uang tumbuh (investasi)", money("resilience.growth", "grw"), `${tumbuh} Isi 0 kalau belum ada.`)}
+      ${goals.length
+        ? goals.map(id => kunci
+          ? saldoBaca(`resilience.goalData.${id}.saved`, `Tabungan tujuan: ${esc(goalLabel(id))}`, lewatCatat)
+          : field(`gs-${id}`, `Tabungan tujuan: ${esc(goalLabel(id))}`, money(`resilience.goalData.${id}.saved`, `gs-${id}`), "Isi 0 kalau belum ada.")).join("")
         : `<p class="hint">Tabungan tujuan muncul setelah Anda memilih tujuan.</p>`}`, "part-tabungan");
   }
 
