@@ -143,7 +143,7 @@
     const st = (id) => ms.find(m => m.id === id);
     const perDay = (v) => [`Setor ${rp(v)} setiap hari narik`, `Sekitar ${rp(Math.round(v * days / 1000) * 1000)} per bulan`];
     if (P.minus && x.net < 0) rows.push(["Keluar dari minus", [P.minus.cut ? `Hemat pengeluaran ${rp(P.minus.cut)} per bulan` : "", P.minus.hours ? `Tambah narik ${P.minus.hours} jam per minggu` : ""].filter(Boolean), "minus"]);
-    const em = ["bantalan", "darurat"].find(id => P[id] && st(id)?.status !== "selesai");
+    const em = ["pendek", "darurat"].find(id => P[id] && st(id)?.status !== "selesai");
     if (em) rows.push(["Dana darurat", perDay(P[em].perDay), em]);
     if (P.tumbuh && st("tumbuh")?.status !== "selesai") rows.push(["Tabungan tujuan", perDay(P.tumbuh.perDay), "tumbuh"]);
     if (st("investasi")?.target > 0 && st("investasi")?.status !== "terkunci") rows.push(["Tabungan tumbuh", [`Setor ${rp(st("investasi").target)} per bulan`], "investasi"]);
@@ -232,7 +232,7 @@
     const wajib = !lane.highDone;
     return `<a class="lane-mini" href="#milestone/utang">
       <span class="lane-ic">${IC.lane}</span>
-      <span class="lane-txt"><b>${wajib ? `Wajib lunas dulu: ${lane.highCount} utang bunga tinggi` : `Sambil jalan: pelunasan utang ${lane.progress}%`}</b><small>${wajib ? `Sisa ${rp(lane.highLeft)}. Utang lain boleh jalan terus.` : `Sisa ${rp(lane.left)}${lane.months != null ? ` · perkiraan lunas ${monthYear(lane.months)}` : ""}`}</small></span>
+      <span class="lane-txt"><b>${wajib ? `Wajib lunas dulu: ${lane.highCount} utang jangka pendek` : `Sambil jalan: pelunasan utang ${lane.progress}%`}</b><small>${wajib ? `Sisa ${rp(lane.highLeft)}. Cicilan jangka panjang boleh jalan terus.` : `Sisa ${rp(lane.left)}${lane.months != null ? ` · perkiraan lunas ${monthYear(lane.months)}` : ""}`}</small></span>
       <span class="chev" aria-hidden="true">›</span>
     </a>`;
   }
@@ -271,7 +271,7 @@
         <div class="ov-prog"><span class="fc-track"><i style="width:${Math.max(p, 2)}%"></i></span><b class="num">${doneN}/${steps.length}</b></div>
       </div>
       <ol class="mlist ${lane ? "has-lane" : ""}">
-        ${lane ? `<li class="lane-legend"><a href="#milestone/utang"><span class="lane-ic">${IC.lane}</span><span><b>Pelunasan utang</b><small>Utang bunga tinggi harus bersih untuk menyelesaikan Step 2 · ${x.lane.progress}% lunas</small></span><span class="chev" aria-hidden="true">›</span></a></li>` : ""}
+        ${lane ? `<li class="lane-legend"><a href="#milestone/utang"><span class="lane-ic">${IC.lane}</span><span><b>Pelunasan utang</b><small>Utang jangka pendek harus bersih untuk menyelesaikan Step 2 · ${x.lane.highProgress}% lunas</small></span><span class="chev" aria-hidden="true">›</span></a></li>` : ""}
         ${ms.map(row).join("")}
       </ol>
       ${x.lane.active ? laneCard(x.lane) : ""}
@@ -370,8 +370,8 @@
     const awal = 1, akhir = Math.max(awal + 1, n - 2);
     const left = ((awal + 0.5) / n) * 100, width = ((akhir - awal) / n) * 100;
     return `<div class="mtrack-wrap has-lane">${nodes}
-      <a class="lane-band ${lane.highDone ? "done" : ""} ${currentId === "utang" ? "current" : ""}" href="#milestone/utang" style="left:${left}%;width:${width}%" data-tip="Utang bunga tinggi ${lane.highProgress}% · sisa ${rp(lane.highLeft)}" aria-label="Pelunasan utang bunga tinggi, ${lane.highProgress}%">
-        <i style="width:${Math.max(lane.highProgress, 2)}%"></i><span>Bunga tinggi ${lane.highProgress}%</span>
+      <a class="lane-band ${lane.highDone ? "done" : ""} ${currentId === "utang" ? "current" : ""}" href="#milestone/utang" style="left:${left}%;width:${width}%" data-tip="Utang jangka pendek ${lane.highProgress}% · sisa ${rp(lane.highLeft)}" aria-label="Pelunasan utang jangka pendek, ${lane.highProgress}%">
+        <i style="width:${Math.max(lane.highProgress, 2)}%"></i><span>Jangka pendek ${lane.highProgress}%</span>
       </a></div>`;
   }
 
@@ -509,15 +509,15 @@
       const target = Math.max(0, m.target || 0);
       S.resilience.savings = Math.max(frozenMoney(), Math.ceil((target * 1.05) / 1000) * 1000);
       let lunas = 0;
-      if (m.id === "bantalan") {
-        for (const d of S.debts || []) if (isHighCost(d) && Number(d.remaining) > 0) { d.remaining = 0; lunas++; }
-        // Satu utang berbunga rendah sengaja disisakan belum lunas, supaya terlihat bahwa
+      if (m.id === "pendek") {
+        for (const d of S.debts || []) if (isShort(d) && Number(d.remaining) > 0) { d.remaining = 0; lunas++; }
+        // Satu cicilan jangka panjang sengaja disisakan belum lunas, supaya terlihat bahwa
         // utang seperti itu tidak menahan Step 3.
-        const adaRendah = (S.debts || []).some(d => Number(d.remaining) > 0 && !isHighCost(d));
-        if (!adaRendah) (S.debts ||= []).push({ type: "Koperasi", remaining: 4000000, months: 24, rate: "0.8", due: "" });
+        const adaPanjang = (S.debts || []).some(d => Number(d.remaining) > 0 && !isShort(d));
+        if (!adaPanjang) (S.debts ||= []).push({ type: "Koperasi", remaining: 4000000, months: 24, rate: "0.8", due: "", term: "panjang" });
       }
       lewatiMasaBertahan(m.id);
-      return `Tabungan aman diisi ${rp(S.resilience.savings)}${lunas ? ` · ${lunas} utang bunga tinggi ditandai lunas` : ""}`;
+      return `Tabungan aman diisi ${rp(S.resilience.savings)}${lunas ? ` · ${lunas} utang jangka pendek ditandai lunas` : ""}`;
     }
     if (m.tool === "growth") {
       const v = Math.max(Math.round(m.target || 0), 50000), g = (S.growth ||= {});
@@ -562,11 +562,11 @@
   // Yang menahan Step 2 hanya utang berbunga tinggi. Utang lain tetap ditampilkan supaya jelas
   // bahwa sisanya boleh dicicil terus tanpa menahan langkah berikutnya.
   function debtDutyCard(m) {
-    if (m.id !== "bantalan") return "";
+    if (m.id !== "pendek") return "";
     const buka = S.debts.map((d, i) => ({ d, i })).filter(o => debtOpen(o.d));
     if (!buka.length) return "";
-    const wajib = buka.filter(o => isHighCost(o.d));
-    const lain = buka.filter(o => !isHighCost(o.d));
+    const wajib = buka.filter(o => isShort(o.d));
+    const lain = buka.filter(o => !isShort(o.d));
     const sisaWajib = wajib.reduce((t, o) => t + Number(o.d.remaining), 0);
     const baris = (o, tag) => `<div class="duty-row">
       <span class="duty-txt"><b>${esc(debtTypeLabel(o.d))}</b>${tag}<small>Sisa ${rp(Number(o.d.remaining))}${debtRate(o.d) ? ` · bunga ${String(debtRate(o.d)).replace(".", ",")}% per bulan` : ""}</small></span>
@@ -575,11 +575,11 @@
     return `<section class="card${wajib.length ? "" : " done-card"}" aria-labelledby="duty-h">
       ${wajib.length ? "" : doneRibbon("Utang wajib lunas")}
       <div class="card-head"><h2 id="duty-h">Utang yang wajib lunas di step ini</h2>
-        <p>${wajib.length ? `${wajib.length} utang berbunga tinggi, sisa ${rp(sisaWajib)}. Hanya ini yang menahan Step 3.` : "Tidak ada lagi utang berbunga tinggi. Step ini tidak lagi tertahan utang."}</p></div>
-      ${wajib.length ? `<div class="duty-list">${wajib.map(o => baris(o, '<span class="tag warn">Bunga tinggi</span>')).join("")}</div>` : ""}
+        <p>${wajib.length ? `${wajib.length} utang jangka pendek, sisa ${rp(sisaWajib)}. Hanya ini yang menahan Step 3.` : "Tidak ada lagi utang jangka pendek. Step ini tidak lagi tertahan utang."}</p></div>
+      ${wajib.length ? `<div class="duty-list">${wajib.map(o => baris(o, '<span class="tag warn">Jangka pendek</span>')).join("")}</div>` : ""}
       ${lain.length ? `<div class="duty-list muted">
-        <p class="lbl">Boleh jalan terus</p>
-        <p class="hint">Utang ini tidak menahan Step 3. Cicil seperti biasa.</p>
+        <p class="lbl">Cicilan jangka panjang</p>
+        <p class="hint">Utang ini tidak menahan Step 3. Cicilannya sudah dipotong dari budget harian Step 1.</p>
         ${lain.map(o => baris(o, "")).join("")}
       </div>` : ""}
     </section>`;
@@ -673,7 +673,7 @@
           <button type="button" class="btn sm" data-act="catat" data-kind="setor">${ICON.plus} Setor</button>
           ${now > 0 ? `<button type="button" class="btn sm secondary" data-act="catat" data-kind="ambil">Ambil</button>` : ""}
         </div>
-        ${m.id === "bantalan" && x.highDebts.length ? `<p class="hint">Masih ada ${x.highDebts.length} utang bunga tinggi. Selama belum lunas, ${pct(MILESTONE.STEP2_SPLIT_DEBT)} sisa uang diarahkan ke utang.</p>` : ""}
+        ${m.id === "pendek" && x.shortDebts.length ? `<p class="hint">Masih ada ${x.shortDebts.length} utang jangka pendek. Selama belum lunas, ${pct(MILESTONE.STEP2_SPLIT_DEBT)} sisa uang diarahkan ke utang.</p>` : ""}
         ${lastEntryNote([m.id, "tabungan"])}
       </section>`;
     }
