@@ -1487,7 +1487,7 @@
       applyOthers(others);
       const i = S.wallets.findIndex(w => w.walletId === id);
       i >= 0 ? (S.wallets[i] = view) : S.wallets.push(view);
-      toast(`${walletMeta(id).label} tersinkron · ${view.summary.txCount} transaksi`);
+      toast(`${walletMeta(id)?.label || id} tersinkron · ${view.summary.txCount} transaksi`);
     } catch (e) {
       ui.walletError = e.message;
       if (e.code === "not_linked") S.wallets = S.wallets.filter(w => w.walletId !== id);
@@ -1624,7 +1624,7 @@
       S.consent.useWallet = true;
       S.step = EW; S.maxStep = Math.max(S.maxStep, EW);
       if (link === "error") ui.walletError = qs.get("reason") === "phone_mismatch"
-        ? `Nomor ${walletMeta(linkedId).label} yang dihubungkan (akhiran ${esc(qs.get("got") || "")}) beda dengan nomor yang Anda isi di Izin data (${maskPhone(walletPhone(linkedId))}). Hubungkan pakai nomor yang sama, atau ubah nomornya di Izin data.`
+        ? `Nomor ${walletMeta(linkedId)?.label || "e-wallet"} yang dihubungkan (akhiran ${esc(qs.get("got") || "")}) beda dengan nomor yang Anda isi di Izin data (${maskPhone(walletPhone(linkedId))}). Hubungkan pakai nomor yang sama, atau ubah nomornya di Izin data.`
         : LINK_ERRORS[qs.get("reason")] || "Gagal menghubungkan e-wallet. Silakan coba lagi.";
     }
     // Onboarding sudah selesai: perubahan data lewat Profil di app, bukan wizard dari awal.
@@ -1639,7 +1639,7 @@
       const { wallets } = await api("/api/wallets");
       const { wallets: merged, lost } = mergeServerWallets(wallets);
       S.wallets = merged;
-      if (lost.length && !ui.walletError) ui.walletError = `Izin ${lost.map(w => walletMeta(w.walletId).label).join(", ")} sudah berakhir di server. Laju tetap memakai data transaksi terakhir. Hubungkan lagi untuk memperbaruinya.`;
+      if (lost.length && !ui.walletError) ui.walletError = `Izin ${lost.map(w => walletMeta(w.walletId)?.label || w.walletId).join(", ")} sudah berakhir di server. Laju tetap memakai data transaksi terakhir. Hubungkan lagi untuk memperbaruinya.`;
       save();
     } catch (e) {
       ui.server = "down";

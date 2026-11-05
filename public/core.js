@@ -660,8 +660,11 @@
     const orphan = server.filter(w => w.source === "statement" && !known.has(w.walletId));
     orphan.forEach(w => dropRemote(w.walletId).catch(() => {}));
     server = server.filter(w => !orphan.includes(w));
-    const lost = S.wallets.filter(w => w.summary && !server.some(x => x.walletId === w.walletId));
-    return { wallets: [...server.map(w => ({ ...w, stale: false })), ...lost.map(w => ({ ...w, stale: true }))], lost };
+    const missing = S.wallets.filter(w => w.summary && !server.some(x => x.walletId === w.walletId));
+    // E statement yang hilang dari server (mis. server dijalankan ulang) tetap dipakai apa adanya: isinya dari dokumen
+    // yang sudah dibaca, bukan izin yang bisa berakhir. Hanya e-wallet yang ditandai "Data terakhir".
+    const docs = missing.filter(w => w.source === "statement"), lost = missing.filter(w => w.source !== "statement");
+    return { wallets: [...server.map(w => ({ ...w, stale: false })), ...docs, ...lost.map(w => ({ ...w, stale: true }))], lost };
   }
   function aggregate() {
     const a = { count: 0, incomePlatform: 0, incomeOther: 0, expenseTotal: 0, debtPayments: 0, internalIn: 0, internalOut: 0, txCount: 0, byPlatform: {}, byCategory: {}, daily: [], recognized: 0, days: {}, partialDays: false };
