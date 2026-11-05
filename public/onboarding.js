@@ -1633,16 +1633,24 @@
     if (blocking !== -1) S.step = blocking;
     if (STEPS[S.step].id === "hasil") ui.analysisIdx = ANALYSIS.length;
     render();
+    // "Server mati" hanya kalau server memang tidak menjawab. Galat saat menggabungkan data e-wallet tidak boleh
+    // menyembunyikan tombol hubungkan dan unggah, cukup dicatat di konsol dan pakai data di perangkat.
     try {
       ui.config = await api("/api/config");
       ui.server = "ok";
-      const { wallets } = await api("/api/wallets");
-      const { wallets: merged, lost } = mergeServerWallets(wallets);
-      S.wallets = merged;
-      if (lost.length && !ui.walletError) ui.walletError = `Izin ${lost.map(w => walletMeta(w.walletId)?.label || w.walletId).join(", ")} sudah berakhir di server. Laju tetap memakai data transaksi terakhir. Hubungkan lagi untuk memperbaruinya.`;
-      save();
     } catch (e) {
       ui.server = "down";
+    }
+    if (ui.server === "ok") {
+      try {
+        const { wallets } = await api("/api/wallets");
+        const { wallets: merged, lost } = mergeServerWallets(wallets);
+        S.wallets = merged;
+        if (lost.length && !ui.walletError) ui.walletError = `Izin ${lost.map(w => walletMeta(w.walletId)?.label || w.walletId).join(", ")} sudah berakhir di server. Laju tetap memakai data transaksi terakhir. Hubungkan lagi untuk memperbaruinya.`;
+        save();
+      } catch (e) {
+        console.error("Laju: gagal membaca data e-wallet dari server", e);
+      }
     }
     render(true);
     // e-wallet yang disinkron sebelum ada rincian harian: sinkron ulang sekali per sesi supaya kalender punya pengeluaran per hari
