@@ -811,9 +811,6 @@
       ${card("Kebiasaan menabung", "", `
         ${field("msave", "Rata-rata disisihkan per bulan", money("resilience.monthlySave", "msave"))}
         <div class="field"><span class="lbl">Kebiasaan menabung Anda</span><div class="grid3">${HABITS.map(h => opt("resilience.habit", h.id, h.label)).join("")}</div></div>`, "part-awal")}
-      ${card("Uang disimpan di mana saja?", "", `
-        <div class="chips">${SAVING_PLACES.map(x => chip("resilience.places", x, x)).join("")}${r.customPlaces.map(n => customOpt("place", n)).join("")}${adderToggle("place")}</div>
-        ${adderRow("place")}`, "part-simpan")}
       ${card("Kalau besok butuh Rp1 juta mendadak?", "", `
         <div class="grid2">${SHOCK.map(s => opt("resilience.shock", s.id, s.label)).join("")}</div>`, "part-awal")}
       ${card("Tujuan keuangan Anda", "", `
@@ -888,7 +885,6 @@
       ${vizEmergency(c, h)}
       ${vizReliability(c)}
       ${checkLinks(c)}
-      ${card("", "", `<div class="next-up">${ICON.badge}<div><b>Berikutnya: dashboard & tangga milestone</b><p>Langkah-langkah menuju tujuan utama Anda.</p></div></div>`)}
     `);
   };
 

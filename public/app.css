@@ -442,6 +442,16 @@ body.no-fab .bottomnav { display: none; }
 .prow-txt small { font-size: .82rem; color: var(--fg); opacity: .7; }
 .ai-card > summary { display: block; }
 .ai-card > summary small { display: block; margin-top: 2px; }
+.ai-run { display: grid; gap: 8px; margin: 10px 0; }
+.ai-out { margin: 10px 0; font-size: .9rem; }
+.ai-out h3 { font-size: .95rem; margin: 14px 0 4px; }
+.ai-out ul, .ai-out ol { padding-left: 1.2em; margin: 0; }
+.ai-out li { margin: 4px 0; }
+.ai-sum { font-weight: 700; margin: 0 0 6px; }
+.ai-warn li { color: var(--st-critical-ink); }
+.ai-fix li { display: grid; gap: 2px; }
+.ai-fix a { font-weight: 700; }
+.ai-fix span { font-size: .84rem; opacity: .8; }
 
 /* ---------- Dashboard: 6 bagian berurutan ---------- */
 .stack.dash { gap: 16px; }

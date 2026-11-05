@@ -545,6 +545,13 @@ window.LAJU_EN = {
   "saat ada setoran atau bayar utang.": "when you deposit or pay debt.",
   "Data untuk analisis AI": "Data for AI analysis",
   "({0} KB, tanpa nama, HP, password)": "({0} KB, no name, phone, or password)",
+  "Minta analisis Gemini": "Ask Gemini for analysis",
+  "Menganalisa…": "Analyzing…",
+  "Yang dikirim hanya angka di bawah ini. Nama, nomor HP, dan password tidak ikut.": "Only the numbers below are sent. Name, phone number, and password are not included.",
+  "Ini jawaban contoh, bukan dari Gemini. Server belum punya kunci API.": "This is a sample answer, not from Gemini. The server does not have an API key yet.",
+  "Yang sudah bagus": "What is working well",
+  "Yang perlu diperbaiki": "What to fix",
+  "30 hari ke depan": "Next 30 days",
 
   // ---------- Profil ----------
   "Data Anda": "Your data",

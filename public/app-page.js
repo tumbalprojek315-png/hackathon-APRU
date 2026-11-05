@@ -912,7 +912,14 @@
           ${ledger.length ? `<ul class="tx-list">${ledger.slice(-5).reverse().map(e => `<li class="tx"><span class="d">${esc(e.label)}</span><span class="a num">${e.amount ? rp(e.amount) : ""}</span><span class="m">${fmtShortDate(new Date(e.at))}</span></li>`).join("")}</ul>` : `<p class="hint">Belum ada catatan. Tekan <b>+ Catat</b> saat ada setoran atau bayar utang.</p>`}
         </section>
 
-        <details class="card more ai-card"><summary>Data untuk analisis AI <small>(${(aiJson.length / 1024).toFixed(1).replace(".", ",")} KB, tanpa nama, HP, password)</small></summary><pre class="ai-json">${esc(aiJson)}</pre></details>
+        <details class="card more ai-card"><summary>Data untuk analisis AI <small>(${(aiJson.length / 1024).toFixed(1).replace(".", ",")} KB, tanpa nama, HP, password)</small></summary>
+          <div class="ai-run">
+            <button type="button" class="btn primary" id="aiGo">Minta analisis Gemini</button>
+            <p class="hint">Yang dikirim hanya angka di bawah ini. Nama, nomor HP, dan password tidak ikut.</p>
+          </div>
+          <div class="ai-out" id="aiOut" aria-live="polite"></div>
+          <pre class="ai-json">${esc(aiJson)}</pre>
+        </details>
       </div>`;
   }
 
@@ -1281,5 +1288,39 @@
       }
     } catch (e) { /* server mati: pakai data terakhir yang tersimpan */ }
   }
+  // ---------- Analisis AI (Gemini lewat /api/analisis) ----------
+  function gambarAnalisis(a) {
+    const li = (xs) => xs.map(x => `<li>${esc(x)}</li>`).join("");
+    const contoh = a._contoh
+      ? `<p class="warn">Ini jawaban contoh, bukan dari Gemini. Server belum punya kunci API.</p>` : "";
+    return `${contoh}
+      <p class="ai-sum">${esc(a.kesimpulan)}</p>
+      ${a.peringatan?.length ? `<ul class="ai-warn">${li(a.peringatan)}</ul>` : ""}
+      <h3>Yang sudah bagus</h3><ul>${li(a.kekuatan || [])}</ul>
+      <h3>Yang perlu diperbaiki</h3>
+      <ul class="ai-fix">${(a.perbaikan || []).map(p => `<li><a href="#/langkah/${esc(p.langkahId)}"><b>${esc(p.judul)}</b></a><span>${esc(p.alasan)}</span></li>`).join("")}</ul>
+      <h3>30 hari ke depan</h3><ol>${li(a.prioritas30Hari || [])}</ol>`;
+  }
+
+  document.addEventListener("click", async (e) => {
+    const b = e.target.closest("#aiGo");
+    if (!b) return;
+    const out = document.getElementById("aiOut");
+    const semula = b.textContent;
+    b.disabled = true; b.textContent = "Menganalisa…";
+    out.innerHTML = "";
+    try {
+      const r = await api("/api/analisis", {
+        method: "POST",
+        body: { konteks: buildAIContext(), bahasa: window.LajuI18n?.lang || "id" },
+      });
+      out.innerHTML = gambarAnalisis(r.analisis);
+    } catch (err) {
+      out.innerHTML = `<p class="warn">${esc(err.message)}</p>`;
+    } finally {
+      b.disabled = false; b.textContent = semula;
+    }
+  });
+
   boot();
 })();

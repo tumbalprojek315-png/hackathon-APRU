@@ -753,7 +753,6 @@
     const dti = income > 0 ? totalDebt / (12 * income) : (totalDebt ? 1 : 0);
     const monthlySave = effectiveMonthlySave();
     const saveRate = income > 0 ? monthlySave / income : 0;
-    const safePlaces = r.places.filter(x => x !== "Uang tunai di rumah").length;
     const goalCount = (r.goals || []).length;
     const goalsWithAmount = (r.goals || []).filter(id => Number((r.goalData || {})[id]?.amount) > 0).length;
     const P = (label, pts, max, value, tip) => ({ label, pts: Math.round(clamp(pts, 0, max)), max, value, tip });
@@ -792,8 +791,6 @@
         P("Tujuan yang jelas", goalsWithAmount > 0 ? 7 : goalCount > 0 ? 4 : 0, 7,
           goalCount ? (goalsWithAmount ? `${goalsWithAmount} tujuan punya nominal` : "Ada, belum ada nominal") : "Belum ada",
           "Tetapkan tujuan beserta nominal dan tenggatnya."),
-        P("Simpanan di tempat aman", safePlaces >= 2 ? 6 : safePlaces === 1 ? 3 : 0, 6,
-          `${safePlaces} tempat selain uang tunai`, "Simpan di rekening/e-wallet terpisah. Uang tunai di rumah mudah terpakai."),
       ] },
     ];
     const pillars = groups.map(g => {
@@ -801,7 +798,9 @@
       const worst = [...g.parts].sort((a, b) => (b.max - b.pts) - (a.max - a.pts))[0];
       return { ...g, pts, max, score: Math.round((pts / max) * 100), tip: worst.tip, note: g.parts.map(x => `${x.label}: ${x.value}`).slice(0, 2).join(" · ") };
     });
-    const total = clamp(pillars.reduce((s, g) => s + g.pts, 0), 0, 100);
+    // Total maksimal sekarang 94 (poin Simpanan di tempat aman sudah dihapus), jadi diskala ke 100.
+    const totalPts = pillars.reduce((s, g) => s + g.pts, 0), totalMax = pillars.reduce((s, g) => s + g.max, 0);
+    const total = clamp(Math.round((totalPts / totalMax) * 100), 0, 100);
     return { total, grade: band(total), pillars, months, surplusRatio, dsr, dti, saveRate, net, emergency, totalDebt, highDebts: high };
   }
 

@@ -24,6 +24,7 @@ from urllib.parse import parse_qs, urlencode, urlparse
 
 from openfinance import CATEGORY_LABELS, PLATFORM_LABELS, ProviderError, get_provider, history, pair_transfers, phone_core, summarize
 from openfinance import statement as stmt
+import ai_analisis as ai
 
 ROOT = Path(__file__).resolve().parent
 PUBLIC = ROOT / "public"
@@ -227,6 +228,7 @@ class Handler(SimpleHTTPRequestHandler):
                 "supportedWallets": list(provider.supported_wallets),
                 "categoryLabels": CATEGORY_LABELS,
                 "platformLabels": PLATFORM_LABELS,
+                "aiSiap": ai.siap(),
             }, uid=uid)
         if url.path == "/api/wallets":
             with _lock:
@@ -242,12 +244,26 @@ class Handler(SimpleHTTPRequestHandler):
         if not self._guard():
             return self._error(403, "forbidden", "Permintaan ditolak.", uid)
         try:
-            body = self._json_body(6_000_000 if url.path.startswith("/api/statements/") else 10_000)
+            body = self._json_body(6_000_000 if url.path.startswith("/api/statements/") else 300_000 if url.path == "/api/analisis" else 10_000)
         except (ValueError, json.JSONDecodeError):
             return self._error(400, "bad_request", "Format permintaan tidak valid.", uid)
 
         if url.path in ("/api/statements/upload", "/api/statements/sample"):
             return self._statement(url.path.endswith("/sample"), body, uid)
+
+        if url.path == "/api/analisis":
+            konteks = body.get("konteks")
+            if not isinstance(konteks, dict):
+                return self._error(400, "bad_request", "Konteks analisis tidak valid.", uid)
+            if not ai.siap():
+                return self._error(503, "ai_off", ai.alasan(), uid)
+            ok, pesan = ai.boleh(uid[0])
+            if not ok:
+                return self._error(429, "too_many", pesan, uid)
+            try:
+                return self._send(200, {"analisis": ai.analisa(konteks, str(body.get("bahasa") or "id"))}, uid=uid)
+            except ai.AIError as e:
+                return self._error(e.status, e.code, str(e), uid)
 
         if url.path == "/api/wallets/link":
             wallet_id = str(body.get("walletId", ""))
