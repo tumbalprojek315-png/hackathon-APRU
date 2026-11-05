@@ -679,3 +679,5 @@ body.no-fab .bottomnav { display: none; }
 .mr-table td.n:nth-child(2) { color: inherit; }
 .mv-sum { margin: 0 0 8px; font-size: .9rem; }
 
+.chk-sim .lbl { font-size: .78rem; font-weight: 700; }
+.chk-doc { display: grid; gap: 6px; padding: 8px 0; border-top: 1px dashed var(--border); }

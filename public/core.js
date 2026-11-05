@@ -1267,28 +1267,51 @@ income: { perPlatform: { gojek: 160000, grab: 110000 }, bonus: 400000, tips: 150
     const v = ids.reduce((t, id) => t + (c.agg.byCategory[id] || 0), 0) / 30;
     return v || (c.expMid / 30) * 0.8;
   }
-  // Uang keluar per tanggal. Mode isian sendiri: angka "keluar hari ini" (S.daily). Mode e-wallet/e statement: transaksi.
-  // Mode e-wallet: tagihan bulanan (sewa, listrik, sekolah) tidak ikut cek harian, supaya hari bayar sewa tidak terlihat "boros".
-  // Budget harian untuk cek dikurangi bagian per harinya (fixedPerDay).
+  // Uang keluar per tanggal. Sumbernya, berurutan:
+  //   1. transaksi (e-wallet terhubung atau e statement) kalau tanggal itu tercakup datanya;
+  //   2. catatan "keluar hari ini" dari driver (S.daily);
+  //   3. belum ada: e-wallet = belum disinkron, e statement = menunggu e statement bulan itu, isian sendiri = belum dicatat.
+  // Hari yang belum ada datanya TIDAK dianggap sesuai budget. Tagihan bulanan (sewa, listrik, sekolah) tidak ikut cek
+  // harian, supaya hari bayar sewa tidak terlihat boros; budget untuk cek dikurangi bagian per harinya (fixedPerDay).
   const FIXED_BILLS = ["kontrakan", "listrik", "sekolah"];
   const fixedPerDay = (c) => (c.auto ? FIXED_BILLS.reduce((t, id) => t + (c.agg.byCategory[id] || 0), 0) / 30 : 0);
-  function spentOn(iso, c) {
-    if (!c.auto) return S.daily?.[iso] != null ? Number(S.daily[iso]) : null;
-    const day = c.agg.days[iso];
-    return day ? Object.entries(day.out).reduce((t, [k, v]) => t + (FIXED_BILLS.includes(k) ? 0 : v), 0) : null;
+  // Mode budget harian: e-wallet tercatat sendiri tiap hari; e statement dan isian sendiri dicatat driver.
+  const budgetMode = () => (S.consent.useWallet && S.wallets.some(w => w.summary && !w.stale && w.source !== "statement") ? "wallet"
+    : S.wallets.some(w => w.summary && w.source === "statement") ? "pdf" : "manual");
+  const dataSpent = (iso, c) => { const day = c.agg?.days?.[iso]; return day ? Object.entries(day.out).reduce((t, [k, v]) => t + (FIXED_BILLS.includes(k) ? 0 : v), 0) : null; };
+  function dayInfo(iso, c) {
+    const v = dataSpent(iso, c);
+    if (v != null) return { spent: v, src: "data" };
+    if (S.daily?.[iso] != null) return { spent: Number(S.daily[iso]), src: "catatan" };
+    return { spent: null, src: null };
   }
+  const spentOn = (iso, c) => dayInfo(iso, c).spent;
   function spendLog(c, n = 7) {
-    return Array.from({ length: n }, (_, k) => { const d = inDays(k - n); const iso = isoOf(d); return { iso, d, spent: spentOn(iso, c) }; });
+    return Array.from({ length: n }, (_, k) => { const d = inDays(k - n); const iso = isoOf(d); return { iso, d, ...dayInfo(iso, c) }; });
   }
-  // Patuh budget (skor): hari tercatat yang tidak melewati budget. Belum ada catatan harian: dari rata-rata sebulan.
+  // Patuh budget (skor): hari yang ada datanya dan tidak melewati budget. Hari tanpa data tidak dihitung.
+  // Mode e statement: catatan driver bersifat sementara sampai e statement bulan itu diunggah.
   function budgetStatus(c) {
-    const b = dailyBudget(c) - fixedPerDay(c), log = spendLog(c, 7).filter(x => x.spent != null);
+    const b = dailyBudget(c) - fixedPerDay(c), all = spendLog(c, 7), log = all.filter(x => x.spent != null);
+    const provisional = budgetMode() === "pdf" && (log.some(x => x.src === "catatan") || log.length < all.length);
     if (log.length >= 3) {
       const ok = log.filter(x => x.spent <= b * 1.05).length;
-      return { score: ok / log.length, value: `${ok} dari ${log.length} hari sesuai budget ${rpShort(b)}/hari`, days: log.length, ok };
+      return { score: ok / log.length, value: `${ok} dari ${log.length} hari sesuai budget ${rpShort(b)}/hari${provisional ? " (sementara)" : ""}`, days: log.length, ok, provisional };
     }
     const avg = c.expMid / 30;
-    return { score: avg <= b ? 1 : Math.max(0, 1 - (avg - b) / Math.max(1, b) / 0.3), value: `rata-rata ${rpShort(avg)}/hari · budget ${rpShort(b)}/hari`, days: 0 };
+    return { score: avg <= b ? 1 : Math.max(0, 1 - (avg - b) / Math.max(1, b) / 0.3), value: `rata-rata ${rpShort(avg)}/hari · budget ${rpShort(b)}/hari`, days: 0, provisional };
+  }
+  // Verifikasi akhir bulan: catatan harian driver dibandingkan dengan transaksi (e statement) di tanggal yang sama.
+  // Mutasi tidak memuat uang tunai, jadi catatan boleh lebih besar. Yang ditandai hanya catatan yang lebih kecil
+  // dari transaksi (ada pengeluaran yang tidak dicatat).
+  function verifyDaily(c, n = 30) {
+    let days = 0, ok = 0, under = 0;
+    for (let k = 1; k <= n; k++) {
+      const iso = isoOf(inDays(-k)), v = dataSpent(iso, c);
+      if (v == null || S.daily?.[iso] == null) continue;
+      days++; if (Number(S.daily[iso]) >= v * 0.95) ok++; else under++;
+    }
+    return { days, ok, under };
   }
 
   // ---------- setoran harian & pembagiannya ----------
@@ -1916,7 +1939,7 @@ income: { perPlatform: { gojek: 160000, grab: 110000 }, bonus: 400000, tips: 150
     const act = steps.find(m => m.status === "active" || m.status === "aktif" || m.status === "dibuka_lagi");
     const entry = {
       n: st.n, at: new Date().toISOString(), dueAt: st.nextAt.toISOString(), late: st.late, source: dataSource(), answers,
-      snap: snapshotMetrics(), tier: dataTrust().tier,
+      snap: snapshotMetrics(), tier: dataTrust().tier, budgetMode: budgetMode(), dailyVerify: verifyDaily(calc()),
       steps: { done: steps.filter(m => m.status === "done" || m.status === "selesai").length, total: steps.length, active: act?.id || "", activeNumber: act?.number ?? null, activeTitle: act?.title || "", progress: act?.progress ?? 100 },
     };
     S.monthly.checks.push(entry);

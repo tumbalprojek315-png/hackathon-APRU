@@ -426,6 +426,10 @@ class Handler(SimpleHTTPRequestHandler):
                 mirror = sample_mirror(user) if set(user.get("statements", {})) <= {name} else []
             lines = stmt.sample_lines(name, seed=uid[0] + name, mirror=mirror, platform_label="Gojek", today=today())
             data, filename = stmt.build_pdf(name, lines), f"contoh-{name.lower()}.pdf"
+            if body.get("download"):
+                # hanya membuat berkasnya (30 hari sampai jam simulasi), tidak disimpan: driver mengunggahnya sendiri
+                filename = f"contoh-{name.lower()}-sampai-{today().isoformat()}.pdf"
+                return self._send(200, {"filename": filename, "data": base64.b64encode(data).decode()}, uid=uid)
         else:
             try:
                 data = base64.b64decode(str(body.get("data", "")), validate=True)

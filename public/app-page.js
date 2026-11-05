@@ -134,9 +134,13 @@
   function checkCard() {
     const st = monthlyChecks();
     const simBtn = simMode()
-      ? `<div class="chk-sim"><div class="chips"><button type="button" class="btn sm" data-act="sim-plan">Jalankan rencana + majukan 30 hari</button><button type="button" class="btn secondary sm" data-act="sim-advance">Majukan saja</button></div>
-          <p class="hint">Jalankan rencana: Laju mencatat 30 hari ke depan seolah driver mengikuti rencananya, yaitu setoran harian ke bantalan, dana darurat, atau tujuan, bayar tagihan tepat waktu, dan setor uang tumbuh setelah dana darurat penuh. Semua tercatat di Aktivitas.</p>
-          <p class="hint"><span>Mode simulasi: transaksi bulan berikutnya dibuat generator, dengan anggapan driver mengikuti rencana sehingga belanja turun sekitar 8% per bulan.</span>${window.LajuSim?.days ? ` <span>Jam sudah dimajukan ${window.LajuSim.days} hari.</span>` : ""}</p></div>` : "";
+      ? `<div class="chk-sim">
+          <span class="lbl">Jalankan rencana lalu majukan</span>
+          <div class="chips">${[1, 7, 30].map(n => `<button type="button" class="btn sm${n === 30 ? "" : " secondary"}" data-act="sim-plan" data-days="${n}">${n} hari</button>`).join("")}</div>
+          <span class="lbl">Majukan saja, tanpa rencana</span>
+          <div class="chips">${[1, 7, 30].map(n => `<button type="button" class="btn secondary sm" data-act="sim-advance" data-days="${n}">${n} hari</button>`).join("")}</div>
+          <p class="hint">Jalankan rencana: Laju mencatat hari hari itu seolah driver mengikuti rencananya, yaitu setoran harian ke bantalan, dana darurat, atau tujuan, bayar tagihan tepat waktu, mencatat keluar harian (mode e statement dan isian sendiri), dan setor uang tumbuh setelah dana darurat penuh. Semua tercatat di Aktivitas.</p>
+          <p class="hint"><span>Mode simulasi: transaksi hari berikutnya dibuat generator, dengan anggapan driver mengikuti rencana sehingga belanja turun sekitar 8% per bulan.</span>${window.LajuSim?.days ? ` <span>Jam sudah dimajukan ${window.LajuSim.days} hari.</span>` : ""}</p></div>` : "";
     if (chk.result) return checkResultCard(chk.result);
     if (!st.pending) {
       const left = st.nextAt ? Math.max(0, Math.ceil((st.nextAt - Date.now()) / 864e5)) : null;
@@ -146,15 +150,20 @@
       return `<section class="card chk-card" aria-labelledby="chk-h"><div class="card-head"><h2 id="chk-h">Cek bulanan</h2><p>${st.done} dari ${CHECK_TOTAL} selesai</p></div>${body}</section>`;
     }
     const yn = (key, label) => `<div class="field"><span class="lbl">${label}</span><div class="chips">${[["ya", "Ya"], ["tidak", "Tidak"]].map(([v, t]) => `<button type="button" class="chip" aria-pressed="${chk[key] === v}" data-act="chk-answer" data-k="${key}" data-v="${v}">${t}</button>`).join("")}</div></div>`;
-    const needSync = hasData() && !chk.synced;
+    const wal = S.wallets.filter(w => w.summary && w.source !== "statement"), docs = S.wallets.filter(w => w.summary && w.source === "statement");
+    const docsDone = docs.every(docFresh);
+    // e-wallet dianggap sudah diperbarui kalau semua tersinkron dalam sehari terakhir (tetap benar setelah dimuat ulang)
+    const walDone = chk.synced || (wal.length && wal.every(w => w.syncedAt && Date.now() - new Date(w.syncedAt).getTime() < 864e5));
+    const needSync = (wal.length && !walDone) || (docs.length && !docsDone);
     const ready = !needSync && chk.debt && chk.shock;
     return `<section class="card chk-card due" aria-labelledby="chk-h">
       <div class="card-head"><h2 id="chk-h">Cek bulan ke ${st.n} dari ${CHECK_TOTAL}</h2><p>${st.late ? "Terlambat, tetap dihitung" : "Sudah waktunya"}</p></div>
       <ol class="chk-steps">
         <li class="${needSync ? "" : "done"}"><b>Perbarui data</b>
-          ${hasData() ? (chk.synced ? `<small>${esc(chk.msg)}</small>` : `<small>Sinkron ulang e-wallet${S.wallets.some(w => w.source === "statement") ? " dan e statement" : ""} supaya angka bulan ini terbaca.</small>
-            <div><button type="button" class="btn sm" data-act="chk-sync" ${chk.busy ? "disabled" : ""}>${chk.busy ? "Memperbarui…" : "Perbarui data sekarang"}</button></div>`)
-          : `<small>Belum ada e-wallet atau e statement. Perbarui isian pendapatan dan pengeluaran lewat <a href="#profil">Profil</a> kalau berubah.</small>`}
+          ${wal.length ? (walDone ? `<small>${esc(chk.msg || "E-wallet sudah tersinkron hari ini.")}</small>` : `<small>Sinkron ulang e-wallet supaya transaksi bulan ini terbaca.</small>
+            <div><button type="button" class="btn sm" data-act="chk-sync" ${chk.busy ? "disabled" : ""}>${chk.busy ? "Memperbarui…" : "Sinkron ulang e-wallet"}</button></div>`) : ""}
+          ${docs.map(w => statementRow(w)).join("")}
+          ${newStatementRow(docs.length)}
           ${chk.err ? `<p class="err" role="alert">${esc(chk.err)}</p>` : ""}</li>
         <li class="${chk.debt && chk.shock ? "done" : ""}"><b>Jawab dua pertanyaan</b>
           ${yn("debt", "Ada utang atau pinjaman baru bulan ini?")}
@@ -164,12 +173,74 @@
       </ol>
     </section>`;
   }
+  // Satu baris per dompet e statement di cek bulanan: sampai tanggal berapa datanya, lalu unggah PDF bulan ini.
+  // Dianggap sudah diperbarui kalau diunggah di cek ini, atau datanya sampai paling lama 7 hari lalu (tetap benar setelah halaman dimuat ulang).
+  const docFresh = w => !!chk.uploaded?.[w.walletId] || (!!w.period?.to && (Date.now() - parseIso(w.period.to)) / 864e5 <= CHECK_GRACE);
+  function statementRow(w) {
+    const up = docFresh(w), to = w.period?.to, name = w.accountName, busy = chk.stBusy === name;
+    return `<div class="chk-doc">
+      <small><b data-noi18n>${esc(name)}</b>: <span>e statement ${to ? `sampai ${fmtShortDate(parseIso(to))}` : "belum ada"}</span>${up ? ` <span>· sudah terbaru</span>` : ""}</small>
+      <input type="file" accept="application/pdf,.pdf" data-chkpdf="${esc(name)}" hidden>
+      <div class="chips"><button type="button" class="btn sm${up ? " secondary" : ""}" data-act="chk-pdf" data-name="${esc(name)}" ${busy ? "disabled" : ""}>${busy ? "Membaca…" : up ? "Unggah lagi" : "Unggah e statement bulan ini (PDF)"}</button>
+        ${simMode() && !up ? `<button type="button" class="btn secondary sm" data-act="chk-sample" data-name="${esc(name)}" ${busy ? "disabled" : ""}>Pakai contoh</button>` : ""}</div>
+      ${simMode() && !up && !ui.config?.demo ? `<p class="hint"><span>Mau coba unggah sendiri?</span> <button type="button" class="link-btn inline" data-act="chk-sample-dl" data-name="${esc(name)}">Unduh PDF contoh bulan ini</button><span>, lalu unggah lewat tombol di atas.</span></p>` : ""}
+    </div>`;
+  }
+  // Rekening lain (belum pernah diunggah) bisa ditambah langsung di cek bulanan, tanpa ke Profil.
+  function newStatementRow(hasDocs) {
+    const busy = chk.stBusy === "__new";
+    return `<div class="chk-doc">
+      <small>${hasDocs ? "Punya rekening lain? Tambah e statementnya di sini." : "Punya rekening bank? Unggah e statement bulan ini supaya pendapatan dan pengeluarannya ikut dihitung."}</small>
+      <input class="input" type="text" id="chk-newbank" placeholder="Nama bank, misalnya BRI" maxlength="40" value="${esc(chk.newBank || "")}">
+      <input type="file" accept="application/pdf,.pdf" data-chkpdf="__new" hidden>
+      <div class="chips"><button type="button" class="btn secondary sm" data-act="chk-pdf" data-name="__new" ${busy ? "disabled" : ""}>${busy ? "Membaca…" : "Unggah e statement (PDF)"}</button>
+        ${simMode() ? `<button type="button" class="btn secondary sm" data-act="chk-sample" data-name="__new" ${busy ? "disabled" : ""}>Pakai contoh</button>` : ""}</div>
+    </div>`;
+  }
+  async function uploadStatementCheck(name, file) {
+    if (name === "__new") {
+      const typed = ($("#chk-newbank")?.value || "").trim();
+      chk.newBank = ""; chk.stBusy = "__new";
+      name = typed || "Rekening";
+    }
+    chk.stBusy = chk.stBusy === "__new" ? "__new" : name; chk.err = ""; render(true);
+    try {
+      let body = { name };
+      if (file) {
+        if (!/pdf$/i.test(file.name)) throw new Error("Hanya berkas PDF yang bisa dibaca.");
+        if (file.size > 5e6) throw new Error("Berkas terlalu besar. Maksimal 5 MB.");
+        const buf = new Uint8Array(await file.arrayBuffer()); let bin = "";
+        for (let k = 0; k < buf.length; k += 0x8000) bin += String.fromCharCode.apply(null, buf.subarray(k, k + 0x8000));
+        body = { ...body, filename: file.name, data: btoa(bin) };
+      }
+      const { others, ...v } = await api(`/api/statements/${file ? "upload" : "sample"}`, { method: "POST", body });
+      const i = S.wallets.findIndex(x => x.walletId === v.walletId); if (i >= 0) S.wallets[i] = { ...v, stale: false }; else S.wallets.push(v);
+      for (const o of others || []) { const j = S.wallets.findIndex(x => x.walletId === o.walletId); if (j >= 0 && o.summary) S.wallets[j] = { ...o, stale: false }; }
+      autofillFromVerified();
+      (chk.uploaded ||= {})[v.walletId] = true;
+      snack(`E statement ${name} terbaca · sampai ${fmtShortDate(parseIso(v.period.to))}`);
+    } catch (err) { chk.err = err.message; }
+    chk.stBusy = ""; save(); render(true);
+  }
+  // Mode simulasi: buat PDF contoh 30 hari sampai jam simulasi (berisi sisi rekening dari tarik saldo e-wallet), untuk diunggah sendiri.
+  async function downloadSampleStatement(name) {
+    try {
+      const r = await api("/api/statements/sample", { method: "POST", body: { name, download: true } });
+      const bin = atob(r.data), buf = new Uint8Array(bin.length);
+      for (let k = 0; k < bin.length; k++) buf[k] = bin.charCodeAt(k);
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(new Blob([buf], { type: "application/pdf" })); a.download = r.filename;
+      document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+      snack(`PDF contoh diunduh: ${r.filename}`);
+    } catch (err) { chk.err = err.message; render(true); }
+  }
   function checkResultCard(e) {
     const list = monthlyChecks().list, prev = list.length >= 2 ? list[list.length - 2].snap : S.startSnap;
     const arrow = (d, dir) => !d ? `<span class="dl same">=</span>` : `<span class="dl ${d * dir > 0 ? "up" : "down"}">${d > 0 ? "▲" : "▼"}</span>`;
     return `<section class="card chk-card" aria-labelledby="chk-h">
       <div class="card-head"><h2 id="chk-h">Cek bulan ke ${e.n} tersimpan</h2><p>Dibanding ${list.length >= 2 ? `cek bulan ke ${e.n - 1}` : "awal onboarding"}</p></div>
       ${prev ? `<table class="cmp-table"><tbody>${CHECK_ROWS.map(([l, k, f, dir]) => { const a = prev[k] ?? 0, b = e.snap[k] ?? 0; return `<tr><th scope="row">${l}</th><td class="n">${f(a)}</td><td class="n"><b>${f(b)}</b></td><td class="n">${arrow(b - a, dir)}</td></tr>`; }).join("")}</tbody></table>` : ""}
+      ${e.dailyVerify?.days ? `<p class="hint"><span>Catatan harian cocok dengan mutasi di ${e.dailyVerify.ok} dari ${e.dailyVerify.days} hari${e.dailyVerify.under ? `, ${e.dailyVerify.under} hari catatannya lebih kecil dari mutasi` : ""}.</span></p>` : ""}
       <p class="hint"><span>${e.steps.activeTitle ? `Tahap ${e.steps.activeNumber} sekarang: ${esc(e.steps.activeTitle)}, ${e.steps.progress}%.` : "Semua tahap selesai."}</span> <span>${e.steps.done} dari ${e.steps.total} tahap selesai.</span></p>
       <div class="chips"><a class="btn sm" href="#rapor">Lihat rapor bulanan</a><button type="button" class="btn secondary sm" data-act="chk-close">Tutup</button></div>
     </section>`;
@@ -181,10 +252,8 @@
       if (!w.summary) continue;
       try {
         let view;
-        if (w.source === "statement") {
-          if (!simMode()) { fail.push(`${w.accountName} (unggah e statement bulan ini lewat Profil)`); continue; }
-          view = await api("/api/statements/sample", { method: "POST", body: { name: w.accountName } });
-        } else {
+        if (w.source === "statement") continue;   // e statement diunggah per dompet di baris sendiri
+        {
           if (w.stale) { fail.push(`${channelLabel(w.walletId)} (izin berakhir, hubungkan lagi lewat Profil)`); continue; }
           view = await api(`/api/wallets/${w.walletId}/sync`, { method: "POST", body: {} });
         }
@@ -226,20 +295,21 @@
 
   // Simulasi 30 hari ke depan kalau driver mengikuti rencana. Dipanggil sebelum jam dimajukan, jadi tagihan yang
   // jatuh tempo dalam 30 hari tercatat dibayar tepat waktu. Mengembalikan jumlah catatan.
-  function runPlanMonth() {
-    const x = ladderContext(); let n = 0;
+  function runPlan(days = 30) {
+    const x = ladderContext(); let n = 0, f = days / 30;
     const log = (type, label, amount, step, paths, apply) => { recordChange({ type, label: `Simulasi: ${label}`, amount, step, paths, apply }); n++; };
     // 1. setoran harian x 30 hari, dibagi sesuai rencana bulan ini
-    for (const it of x.alloc.items) {
+    for (const it0 of x.alloc.items) {
+      const it = { ...it0, amount: r1k(it0.amount * f) };
       if (!it.amount) continue;
       if (it.key === "cushion" || it.key === "emergency") log("deposit", `setoran ${rp(it.amount)} ke ${it.key === "cushion" ? "bantalan" : "dana darurat"}`, it.amount, "tabungan", ["resilience.savings"], () => { S.resilience.savings = (Number(S.resilience.savings) || 0) + it.amount; });
       if (it.key === "goal" && primaryGoal()) { const path = `resilience.goalData.${primaryGoal()}.saved`; log("goal-deposit", `setoran ${rp(it.amount)} ke tujuan`, it.amount, "tujuan", [path], () => set(path, (Number(get(path)) || 0) + it.amount)); }
     }
     // 2. bagian utang: dibayarkan ke utang jangka pendek sesuai urutan pelunasan
-    let pool = allocAmount(x, "debt");
+    let pool = r1k(allocAmount(x, "debt") * f);
     const pay = (d, v, step) => {
       const i = S.debts.indexOf(d), rem = Number(d.remaining), amt = Math.min(v, rem), left = rem - amt;
-      const bill = !!d.due && daysUntil(d.due) <= 30 && (amt >= dueAmount(d) * 0.99 || !left);
+      const bill = !!d.due && daysUntil(d.due) <= days && (amt >= dueAmount(d) * 0.99 || !left);
       log(left ? "pay" : "paidoff", left ? `bayar ${debtTypeLabel(d)} ${rp(amt)}` : `${debtTypeLabel(d)} lunas`, amt, step, [`debts.${i}`, "payments"], () => {
         if (bill) (S.payments ||= []).push({ type: debtTypeLabel(d), due: d.due, paidAt: isoOf(new Date()), amount: amt, onTime: true });
         d.remaining = left; if (!left) d.paidOff = true; else if (bill) { rollDue(d); if (Number(d.months) > 1) d.months = Number(d.months) - 1; }
@@ -248,13 +318,22 @@
     };
     for (const r of x.payoff.rows) { if (pool <= 0) break; const d = S.debts[r.i]; if (!d || !debtOpen(d)) continue; pool -= pay(d, Math.min(pool, Number(d.remaining)), "pendek"); }
     // tagihan jangka pendek yang jatuh tempo dan belum tertutup bagian utang tetap dibayar sebesar cicilannya
-    for (const d of x.shortDebts) if (debtOpen(d) && d.due && daysUntil(d.due) <= 30) pay(d, dueAmount(d), "pendek");
+    for (const d of x.shortDebts) if (debtOpen(d) && d.due && daysUntil(d.due) <= days) pay(d, dueAmount(d), "pendek");
     // 3. cicilan jangka panjang dibayar sesuai jadwal
-    for (const d of x.longDebts) if (debtOpen(d) && (!d.due || daysUntil(d.due) <= 30)) pay(d, dueAmount(d), "utang");
+    for (const d of x.longDebts) if (debtOpen(d) && d.due && daysUntil(d.due) <= days) pay(d, dueAmount(d), "utang");
     // 4. setelah dana darurat 30 hari penuh: setor uang tumbuh 10% pendapatan (tahap investasi)
     if (x.emergency >= FULL_DAYS * x.pokok) {
-      const target = Math.round(MILESTONE.STEP4_INVEST_RATIO * x.c.income / 1000) * 1000, ym = isoOf(new Date(Date.now() + 15 * 864e5)).slice(0, 7);
+      const target = r1k(MILESTONE.STEP4_INVEST_RATIO * x.c.income * f), ym = isoOf(new Date(Date.now() + Math.floor(days / 2) * 864e5)).slice(0, 7);
       if (target > 0) log("growth-deposit", `setoran ${rp(target)} ke uang tumbuh`, target, "investasi", ["resilience.growth", `growth.${ym}`], () => { S.resilience.growth = (Number(S.resilience.growth) || 0) + target; (S.growth ||= {})[ym] = (Number((S.growth || {})[ym]) || 0) + target; });
+    }
+    // 5. mode e statement dan isian sendiri: driver mencatat keluar harian, sedikit di bawah budget (acak tetap per tanggal)
+    if (budgetMode() !== "wallet") {
+      const b = x.budget - fixedPerDay(x.c);
+      for (let k = 0; k < days; k++) {
+        const iso = isoOf(new Date(Date.now() + k * 864e5)), h = [...iso].reduce((t, ch) => t * 31 + ch.charCodeAt(0), 7) % 100;
+        (S.daily ||= {})[iso] = r1k(b * (0.8 + h / 400));
+      }
+      n++;
     }
     return n;
   }
@@ -335,17 +414,25 @@
   function budgetCard(x) {
     const c = x.c, act = activeStep(), strict = act?.id === "minus" || x.net < 0;
     const fixed = r1k(fixedPerDay(c)), b = (x.alloc.items.length ? x.setor.spendBudget : x.budget) - fixed;
-    const today = spentOn(isoOf(new Date()), c), log = spendLog(c, 7);
+    const mode = budgetMode(), todayI = dayInfo(isoOf(new Date()), c), today = todayI.spent, log = spendLog(c, 7);
     const dot = (v) => v == null ? "none" : v <= b ? "ok" : v <= b * 1.15 ? "near" : "over";
-    const dots = `<ol class="bd-week" aria-label="7 hari terakhir">${log.map(d => `<li class="${dot(d.spent)}" data-tip="${esc(d.d.toLocaleDateString("id-ID", { day: "numeric", month: "long", year: "numeric" }))}: ${d.spent == null ? "belum dicatat, dianggap sesuai budget" : rp(d.spent)}" tabindex="0"><i></i><small>${d.d.toLocaleDateString(document.documentElement.lang === "en" ? "en-US" : "id-ID", { weekday: "short" })}</small></li>`).join("")}</ol>`;
+    const empty = { wallet: "belum ada data, sinkron ulang e-wallet", pdf: "belum dicatat, menunggu e statement bulan ini", manual: "belum dicatat" }[mode];
+    const srcTxt = (d) => d.src === "catatan" ? `${rp(d.spent)} (catatan Anda${mode === "pdf" ? ", menunggu e statement" : ""})` : rp(d.spent);
+    const dots = `<ol class="bd-week" aria-label="7 hari terakhir">${log.map(d => `<li class="${dot(d.spent)}" data-tip="${esc(d.d.toLocaleDateString("id-ID", { day: "numeric", month: "long", year: "numeric" }))}: ${d.spent == null ? empty : srcTxt(d)}" tabindex="0"><i></i><small>${d.d.toLocaleDateString(document.documentElement.lang === "en" ? "en-US" : "id-ID", { weekday: "short" })}</small></li>`).join("")}</ol>`;
+    const vf = mode === "pdf" ? verifyDaily(c) : null;
+    const lastSync = mode === "wallet" ? S.wallets.filter(w => w.summary && !w.stale && w.source !== "statement").map(w => w.syncedAt).sort().pop() : "";
+    const stale = lastSync && Date.now() - new Date(lastSync).getTime() > 864e5;
     const mc = monthlyChecks();
     return `<section class="card budget-card" aria-labelledby="bd-h">
       <div class="card-head"><h2 id="bd-h">Budget hari ini</h2><p>${strict ? "Dicek tiap hari sampai satu bulan penuh di bawah budget." : "Berjalan di latar. Laju memberi tahu kalau 3 hari berturut lewat budget."}</p></div>
-      <div class="bd-top"><b class="num">${rp(b)}</b><span>${today != null ? `sudah keluar <b class="num">${rp(today)}</b> · ${today <= b ? `sisa ${rp(b - today)}` : `lewat ${rp(today - b)}`}` : c.auto ? "belum ada transaksi hari ini" : "belum dicatat"}</span></div>
+      <div class="bd-top"><b class="num">${rp(b)}</b><span>${today != null ? `sudah keluar <b class="num">${rp(today)}</b> · ${today <= b ? `sisa ${rp(b - today)}` : `lewat ${rp(today - b)}`}` : mode === "wallet" ? "belum ada transaksi hari ini" : "belum dicatat"}</span></div>
       ${dots}
+      ${stale ? `<p class="hint">Data e-wallet terakhir diperbarui ${relTime(lastSync)}. <button type="button" class="link-btn inline" data-act="bd-sync">Sinkron ulang</button></p>` : ""}
       ${fixed ? `<p class="hint">Di luar tagihan bulanan (sewa, listrik, sekolah) ${rp(fixed)}/hari, yang dibayar sekali sebulan.</p>` : ""}
-      ${!c.auto ? `<div class="adder-row">${moneyIn("bd-today", today || 0)}<button type="button" class="btn sm" data-act="daily-save">Simpan keluar hari ini</button></div>
-        <p class="hint">${strict ? "Isi total uang keluar hari ini. Tidak diisi = dianggap sesuai budget, ditandai perkiraan." : "Cukup seminggu sekali: isi total minggu ini di hari terakhir."}</p>` : ""}
+      ${mode !== "wallet" ? `<div class="adder-row">${moneyIn("bd-today", todayI.src === "catatan" ? today : 0)}<button type="button" class="btn sm" data-act="daily-save">Simpan keluar hari ini</button></div>
+        <p class="hint">${mode === "pdf" ? "Isi total uang keluar hari ini, termasuk tunai. Tidak wajib: hari yang tidak diisi dinilai setelah e statement bulan ini diunggah, dan catatan Anda dicocokkan dengan mutasinya." : "Isi total uang keluar hari ini, termasuk tunai. Hari yang tidak diisi tidak ikut dinilai."}</p>
+        ${vf && vf.days ? `<p class="hint">${vf.under ? ICON.alert : ST_ICON.good}<span>Catatan harian cocok dengan mutasi di ${vf.ok} dari ${vf.days} hari${vf.under ? `. ${vf.under} hari catatannya lebih kecil dari mutasi, ada pengeluaran yang belum dicatat` : ""}.</span></p>` : ""}
+        <p class="hint"><a class="link-btn inline" href="${editUrl("ewallet")}">Hubungkan e-wallet</a> supaya tercatat sendiri tiap hari.</p>` : ""}
       ${ms.find(m => m.id === "minus")?.relapse ? `<div class="note danger">${ICON.alert}<span>Bulan ini belanja lewat budget ${rp(c.expMid - (c.income - x.lane.monthly))}. Tahap yang sudah selesai tidak dibatalkan. Kembali cek harian sampai satu bulan positif.</span></div>` : ""}
       ${mc.nextAt ? `<p class="hint">Cek bulanan ${countdown(Math.max(0, Math.ceil((mc.nextAt - Date.now()) / 864e5)))}.</p>` : ""}
     </section>`;
@@ -1222,14 +1309,18 @@
       }
       case "paid": return openCatat("bayar", Number(el.dataset.i), true);
       case "scenario": return startScenario();
-      case "sim-plan": { const n = runPlanMonth(); save(); window.LajuSim?.advance(30); try { sessionStorage.setItem("laju-flash", `Rencana 30 hari dijalankan (${n} catatan), jam dimajukan 30 hari`); } catch (err) { /* abaikan */ } location.reload(); return; }
-      case "sim-advance": window.LajuSim?.advance(30); try { sessionStorage.setItem("laju-flash", "Jam simulasi dimajukan 30 hari"); } catch (err) { /* abaikan */ } location.reload(); return;
+      case "chk-pdf": return view.querySelector(`[data-chkpdf="${CSS.escape(el.dataset.name)}"]`)?.click();
+      case "chk-sample": return uploadStatementCheck(el.dataset.name, null);
+      case "chk-sample-dl": return downloadSampleStatement(el.dataset.name);
+      case "bd-sync": return checkSync().then(() => snack(chk.err || chk.msg || "Data diperbarui"));
+      case "sim-plan": { const d = Number(el.dataset.days) || 30, n = runPlan(d); save(); window.LajuSim?.advance(d); try { sessionStorage.setItem("laju-flash", `Rencana ${d} hari dijalankan (${n} catatan), jam dimajukan ${d} hari`); sessionStorage.setItem("laju-autosync", "1"); } catch (err) { /* abaikan */ } location.reload(); return; }
+      case "sim-advance": { const d = Number(el.dataset.days) || 30; window.LajuSim?.advance(d); try { sessionStorage.setItem("laju-flash", `Jam simulasi dimajukan ${d} hari`); sessionStorage.setItem("laju-autosync", "1"); } catch (err) { /* abaikan */ } location.reload(); return; }
       case "chk-answer": chk[el.dataset.k] = el.dataset.v; render(true); return;
       case "chk-sync": return checkSync();
       case "chk-save": {
         const e = recordCheck({ newDebt: chk.debt === "ya", shock: chk.shock === "ya" });
         if (!e) return;
-        Object.assign(chk, { synced: false, msg: "", err: "", debt: null, shock: null, result: e });
+        Object.assign(chk, { synced: false, msg: "", err: "", debt: null, shock: null, result: e, uploaded: {} });
         save(); render(true); return snack(`Cek bulan ke ${e.n} tersimpan`);
       }
       case "chk-close": chk.result = null; render(true); return;
@@ -1455,6 +1546,10 @@
     const u = ev.target.closest("[data-undo]"); if (u) return undo(u.dataset.undo);
     const a = ev.target.closest("[data-act]"); if (a) act(a.dataset.act, a);
   });
+  view.addEventListener("change", (ev) => {   // e statement bulan ini diunggah dari kartu cek bulanan
+    const f = ev.target.closest("[data-chkpdf]"); if (!f || !f.files?.[0]) return;
+    uploadStatementCheck(f.dataset.chkpdf, f.files[0]);
+  });
   view.addEventListener("keydown", (ev) => {   // Enter di kolom uang = tekan tombol di sebelahnya
     if (ev.key === "Enter" && ev.target.matches("[data-money]")) {
       ev.preventDefault();
@@ -1513,6 +1608,14 @@
     if (needsLogin()) { location.replace("masuk.html"); return; }   // akun ada, tapi sedang keluar
     render();
     try { const f = sessionStorage.getItem("laju-flash"); if (f) { sessionStorage.removeItem("laju-flash"); snack(f); } } catch (e) { /* abaikan */ }
+    // E-wallet lewat API menarik transaksi sendiri: setelah jam dimajukan, langsung sinkron seperti aplikasi yang dibuka lagi.
+    // E statement tidak ikut: driver harus mengunggah PDF bulan berikutnya di cek bulanan.
+    try {
+      if (sessionStorage.getItem("laju-autosync")) {
+        sessionStorage.removeItem("laju-autosync");
+        if (S.wallets.some(w => w.summary && w.source !== "statement" && !w.stale)) checkSync();
+      }
+    } catch (e) { /* abaikan */ }
     try {   // segarkan ringkasan e-wallet dari server bila tersedia
       ui.config = await api("/api/config");
       render(true);   // tombol simulasi (cek bulanan) butuh ui.config

@@ -397,3 +397,34 @@ Catatan uji: semua halaman tampil tanpa galat (server dan mode contoh, ID dan EN
 Hasil uji (skenario, tiap bulan: jalankan rencana, perbarui data, simpan cek): bulan 0 tahap Keluar dari minus aktif, bulan 1 selesai, bulan 2 utang jangka pendek lunas dan bantalan mini penuh, bulan 4 dana darurat 30 hari penuh, bulan 7 investasi 3 bulan beruntun selesai, lalu tujuan. Skor naik dari 39 ke 85. Angka persis berbeda tiap kali karena transaksi simulasi diacak per pengguna.
 
 **Tambahan Y3: skenario masuk ke data contoh.** Di mode simulasi, tombol "Isi contoh" di onboarding dan "Data contoh" di app sekarang berputar ke empat contoh: Andi, Sudirman, Wayan, lalu Rudi (GoPay + OVO + e statement BRI). Lewat onboarding, contoh Rudi hanya mengisi langkah langkahnya; driver tetap menekan Lanjut sampai Hasil, lalu masuk app dengan tahap Keluar dari minus aktif. Isi skenarionya dipindah ke `buildScenario` di `core.js` supaya dipakai keduanya. Tanpa server (GitHub Pages) tetap tiga contoh.
+
+## Y4. Branch trial (6 Nov): budget harian untuk e statement dan isian sendiri
+
+Sebelumnya hari tanpa data dianggap sesuai budget, dan pengguna e statement tidak punya kotak "keluar hari ini" karena e statement dianggap data otomatis. Akibatnya sebulan penuh setelah unggahan tidak ada yang dicek.
+
+| Bagian | Sekarang |
+|---|---|
+| Sumber uang keluar per tanggal (`dayInfo` di `core.js`) | 1) transaksi e-wallet atau e statement kalau tanggal itu tercakup datanya, 2) catatan "keluar hari ini" dari driver, 3) belum ada. Hari tanpa data tidak dianggap sesuai budget |
+| Mode (`budgetMode`) | E-wallet: tercatat sendiri tiap hari; kalau data lebih tua dari sehari ada tombol Sinkron ulang. E statement dan isian sendiri: kotak "keluar hari ini" (termasuk tunai), tidak wajib |
+| Hari yang tidak diisi | E statement: "menunggu e statement bulan ini", dinilai setelah diunggah. Isian sendiri: "belum dicatat", tidak ikut dinilai |
+| Patuh budget (skor) | Dihitung dari hari yang ada datanya. Mode e statement ditulis "(sementara)" selama masih ada catatan yang belum dicocokkan atau hari yang menunggu |
+| Verifikasi akhir bulan (`verifyDaily`) | Catatan harian dicocokkan dengan transaksi e statement di tanggal yang sama. Catatan boleh lebih besar (tunai tidak ada di mutasi); yang ditandai hanya catatan yang lebih kecil dari mutasi. Hasilnya tampil di kartu budget dan disimpan di cek bulanan |
+| Dorongan | Kartu budget mode e statement dan isian sendiri menawarkan "Hubungkan e-wallet supaya tercatat sendiri tiap hari" |
+
+Tahap Keluar dari minus tetap dinilai dari rata rata sebulan, jadi aturan ini tidak mengubah tangga. Diuji di ketiga mode, ID dan EN: e-wallet setelah jam dimajukan menampilkan "belum ada data, sinkron ulang"; e statement dengan tiga catatan (satu lebih kecil dari mutasi) menampilkan "cocok di 2 dari 3 hari, 1 hari catatannya lebih kecil dari mutasi".
+
+## Y5. Branch trial (6 Nov): unggah e statement di cek bulanan, majukan 1, 7, atau 30 hari
+
+E-wallet menarik transaksinya sendiri, tapi e statement harus diunggah driver tiap bulan. Sebelumnya tempat unggah bulan berikutnya hanya ada di Profil, dan di mode simulasi tombolnya langsung memakai contoh.
+
+| Bagian | Sekarang |
+|---|---|
+| Langkah "Perbarui data" di cek bulanan | E-wallet: satu tombol Sinkron ulang. Tiap e statement punya baris sendiri: sampai tanggal berapa datanya, tombol "Unggah e statement bulan ini (PDF)", dan di mode simulasi "Pakai contoh" |
+| Kapan e statement dianggap sudah diperbarui | Sudah diunggah di cek ini, atau datanya sampai paling lama 7 hari lalu. E-wallet dianggap sudah kalau tersinkron dalam sehari terakhir. Jadi tetap benar setelah halaman dimuat ulang (misalnya ganti bahasa) |
+| Unduh PDF contoh (simulasi) | "Unduh PDF contoh bulan ini" membuat berkas 30 hari sampai jam simulasi, termasuk sisi rekening dari tarik saldo e-wallet, lalu driver mengunggahnya sendiri. Berkas tidak disimpan di server sebelum diunggah |
+| Majukan jam | Pilihan 1, 7, atau 30 hari, dengan atau tanpa menjalankan rencana. `runPlan(days)` menyesuaikan setoran dan pembayaran utang dengan jumlah hari, hanya membayar tagihan yang jatuh tempo dalam rentang itu, dan di mode e statement atau isian sendiri mengisi catatan "keluar hari ini" untuk hari hari itu |
+| Setelah jam dimajukan | E-wallet langsung disinkron, seperti aplikasi yang dibuka lagi. E statement tidak ikut, karena di dunia nyata driver yang harus mengunggah |
+
+Tidak ada perubahan rumus. Diuji dengan skenario Rudi: majukan 1 dan 7 hari (kartu budget ikut berubah), 30 hari (cek bulanan jatuh tempo), unggah PDF hasil unduhan dan "Pakai contoh", simpan cek; mode e statement 7 hari mengisi 7 catatan harian. ID dan EN tanpa error.
+
+**Tambahan Y5: tambah rekening baru di cek bulanan.** Langkah "Perbarui data" sekarang selalu punya tempat unggah e statement, juga untuk driver yang belum pernah mengunggah: isi nama bank, lalu unggah PDF (atau "Pakai contoh" di mode simulasi). Driver tidak perlu ke Profil. Nama bank tidak ikut diterjemahkan di versi EN.
