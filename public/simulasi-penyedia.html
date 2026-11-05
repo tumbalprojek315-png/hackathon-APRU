@@ -69,14 +69,32 @@
       document.querySelectorAll("[data-wallet]").forEach(el => (el.textContent = wallet));
       document.getElementById("title").textContent = `Laju meminta akses hanya-baca ke akun ${wallet} Anda`;
 
-      // Hanya boleh kembali ke callback Laju di origin yang sama (cegah open redirect).
-      let cb;
-      try { cb = new URL(q.get("callback") || "", location.origin); } catch { cb = null; }
-      if (!cb || cb.origin !== location.origin || cb.pathname !== "/api/wallets/callback" || !q.get("session")) {
-        document.getElementById("card").innerHTML = "<h1>Tautan tidak valid</h1><p class='muted'>Kembali ke Laju dan coba hubungkan lagi.</p>";
-        return;
+      // Mode contoh (tanpa server): tidak ada sesi di server, jadi langsung kembali ke onboarding.
+      const demo = q.get("demo") === "1";
+      let cb = null;
+      if (!demo) {
+        // Hanya boleh kembali ke callback Laju di origin yang sama (cegah open redirect).
+        try { cb = new URL(q.get("callback") || "", location.origin); } catch { cb = null; }
+        if (!cb || cb.origin !== location.origin || cb.pathname !== "/api/wallets/callback" || !q.get("session")) {
+          document.getElementById("card").innerHTML = "<h1>Tautan tidak valid</h1><p class='muted'>Kembali ke Laju dan coba hubungkan lagi.</p>";
+          return;
+        }
       }
       const finish = (extra) => {
+        if (demo) {
+          const ok = !extra.error;
+          if (ok) {   // mode contoh menyimpan sendiri daftar dompet yang terhubung
+            try {
+              const k = "laju-demo-linked", L = JSON.parse(localStorage.getItem(k) || "{}");
+              L[q.get("wallet") || ""] = new Date().toISOString();
+              localStorage.setItem(k, JSON.stringify(L));
+            } catch (e) { /* abaikan */ }
+          }
+          const p = new URLSearchParams(ok ? { link: "ok", wallet: q.get("wallet") || "" }
+            : { link: "error", reason: extra.error, wallet: q.get("wallet") || "" });
+          location.replace("onboarding.html?" + p.toString());
+          return;
+        }
         const u = new URL(cb);
         u.search = new URLSearchParams({ session: q.get("session"), wallet: q.get("wallet") || "", ...extra }).toString();
         location.replace(u.toString());
@@ -107,8 +125,7 @@
           if (tries >= 3) setTimeout(() => finish({ error: "otp_failed" }), 1200);
           return;
         }
-        e.submitter.disabled = true;
-        e.submitter.textContent = "Memproses…";
+        if (e.submitter) { e.submitter.disabled = true; e.submitter.textContent = "Memproses…"; }
         finish({ code: q.get("code") || "", ref: phone.slice(-4) });
       });
     })();

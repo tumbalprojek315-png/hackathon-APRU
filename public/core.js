@@ -72,14 +72,49 @@
     { id: "partial", label: "Bisa sebagian" },
     { id: "ok", label: "Bisa tanpa pinjam" },
   ];
+  // Tujuan dibagi dua kelompok. Wajib = punya tenggat yang tidak bisa digeser, atau melindungi
+  // dan menambah penghasilan. Selain itu tumbuh. Wajib mulai di Step 3, tumbuh mulai di Step 5.
   const GOALS = [
-    { id: "lunas", label: "Lunasi utang berbunga tinggi" },
-    { id: "darurat", label: "Punya dana darurat" },
-    { id: "kendaraan", label: "Kendaraan milik sendiri" },
-    { id: "usaha", label: "Buka usaha sampingan" },
-    { id: "anak", label: "Biaya pendidikan anak" },
-    { id: "rumah", label: "Rumah / renovasi" },
+    { id: "pendidikan", label: "Biaya pendidikan awal", group: "wajib" },
+    { id: "nikah_tanggal", label: "Modal menikah, tanggal sudah ditentukan", group: "wajib" },
+    { id: "kendaraan_kerja", label: "Kendaraan untuk kerja", group: "wajib" },
+    { id: "nikah", label: "Modal menikah, tanggal belum ada", group: "tumbuh" },
+    { id: "kendaraan", label: "Kendaraan pribadi", group: "tumbuh" },
+    { id: "usaha", label: "Modal usaha sampingan", group: "tumbuh" },
+    { id: "rumah", label: "Beli rumah", group: "tumbuh" },
   ];
+  const goalGroup = (id) => GOALS.find(g => g.id === id)?.group || "tumbuh";
+  const goalLabel = (id) => GOALS.find(g => g.id === id)?.label || id;
+
+  // ---------- landasan milestone v1 ----------
+  // Semua ambang di satu tempat supaya tim mudah mengubahnya.
+  const MILESTONE = {
+    STEP1_MIN_NET_RATIO: 0.05,
+    STEP2_BUFFER_TARGET: 3000000,
+    STEP2_BUFFER_REGRESS: 2000000,
+    STEP2_SPLIT_DEBT: 0.70,
+    STEP2_SPLIT_BUFFER: 0.30,
+    STEP2_CHECKPOINTS: [500000, 1000000, 2000000, 3000000],
+    REFILL_SHARE: 0.50,
+    STEP3_REGRESS_RATIO: 2 / 3,
+    STEP3_GOAL_MAX_SHARE: 0.30,
+    STEP4_INVEST_RATIO: 0.10,
+    STEP4_STREAK_MONTHS: 3,
+    HOLD_DAYS: 28,
+    REGRESS_WINDOW_DAYS: 30,
+    HIGH_INTEREST_APR: 0.18,
+    GOAL_SWITCH_MIN_DAYS: 90,
+  };
+  // Alasan pengambilan uang beku yang tidak dihitung sebagai kemunduran.
+  const EMERGENCY_REASONS = ["sakit", "kecelakaan", "motor_rusak", "keluarga_meninggal", "akun_diblokir", "bencana"];
+  const WITHDRAW_REASONS = [
+    ["sakit", "Sakit"], ["kecelakaan", "Kecelakaan"], ["motor_rusak", "Motor rusak"],
+    ["keluarga_meninggal", "Keluarga meninggal"], ["akun_diblokir", "Akun diblokir"], ["bencana", "Bencana"],
+    ["lainnya", "Lainnya (bukan darurat)"],
+  ];
+  const isEmergencyReason = (r) => EMERGENCY_REASONS.includes(r);
+  // Target dana darurat Step 3 mengikuti jumlah tanggungan: 0-3 jadi 3 bulan, lalu naik sampai 6.
+  const ddMonths = (t) => (t <= 3 ? 3 : Math.min(6, t));
   const ANALYSIS = ["Membaca riwayat transaksi e-wallet", "Mengelompokkan transaksi ke kategori", "Menggabungkan e-wallet dengan bagian tunai Anda", "Menghitung skor kesehatan finansial"];
   // Rentang skor → status. Warna status selalu didampingi ikon + label.
   const BANDS = [   // batas mengikuti FinHealth Score: <40 rentan, ≥80 sehat
@@ -110,7 +145,8 @@
   const KEY = "laju-onboarding-v1";
   const fresh = () => ({
     step: 0, maxStep: 0, finished: false, finishedAt: "",
-    milestones: { plans: {}, baseline: {}, log: {}, doneAt: {}, debtMethod: "avalanche" },   // rencana, dasar utang, riwayat progres, tanggal selesai
+    // st = status tiap step, stLog = riwayat perubahan status, expenseLock = pengeluaran bulanan terkunci
+    milestones: { plans: {}, baseline: {}, log: {}, doneAt: {}, debtMethod: "avalanche", st: {}, stLog: [], expenseLock: null },
     ledger: [],      // catatan setoran/bayar/perubahan dari halaman tangga (bisa diurungkan)
     scoreLog: [],    // skor harian, untuk rapor
     startSnap: null, // potret kondisi saat onboarding selesai (rapor "awal vs sekarang")
@@ -120,9 +156,11 @@
       platforms: [], customPlatforms: [], vehicle: "", ownership: "", hoursPerDay: 9, daysPerWeek: 6, area: "",
       status: "", customStatuses: [], dependents: 0, sideJobs: [], customSideJobs: [],
       channels: [], customChannels: [],   // lewat mana uang masuk & keluar: e-wallet, rekening bank, tunai, lainnya
-      hasBank: false, hasBpjsKes: false, hasBpjsKet: false, hasInsurance: false, recordsIncome: "",
+      hasInsurance: false, recordsIncome: "",
     },
-    consent: { useWallet: null, useManual: true, agreeTerms: false, agreeDataUse: false },   // useWallet null = belum memilih. Isian manual selalu dipakai
+    // Dua jalur yang saling meniadakan: useWallet true = lewat e-wallet, false = isi manual, null = belum memilih.
+    consent: { useWallet: null, useManual: true, agreeTerms: false, agreeDataUse: false },
+    autofill: null,            // catatan kapan kolom diisi otomatis dari transaksi, supaya tidak menimpa hasil edit
     wallets: [],
     income: { perPlatform: {}, bonus: 0, tips: 0, other: 0, weekAvg: 0, best: 0, worst: 0 },
     expenses: Object.fromEntries(EXPENSE_CATEGORIES.map(c => [c.id, { on: false, min: 0, max: 0 }])),   // rentang per bulan yang diketik, kosong = tidak dihitung
@@ -130,12 +168,17 @@
     customDebtTypes: [],
     // Penjelasan selisih isian vs e-wallet per item, mis. { "exp:kontrakan": "tunai", "inc:other": "bukan" }
     verify: {},
-    resilience: { savings: 0, goalSaved: 0, monthlySave: 0, habit: "", places: [], customPlaces: [], shock: "", goals: [], primaryGoal: "", horizon: 12, goalAmount: 0, wantsBankLoan: null },
+    // savings = uang beku (bantalan Step 2 + dana darurat Step 3). growth = uang tumbuh Step 4.
+    // goalData = rincian per tujuan: { amount, deadline, saved, startedAt }
+    resilience: { savings: 0, growth: 0, monthlySave: 0, habit: "", places: [], customPlaces: [], shock: "", goals: [], goalData: {}, horizon: 12, wantsBankLoan: null },
+    sick: [],            // rentang Mode Sakit: { from, to }
+    growth: {},          // setoran uang tumbuh per bulan: { "2026-11": 250000 }
+    withdrawals: [],     // pengambilan uang beku: { at, amount, reason }
     notes: "",
   });
 
   let S = load();
-  const ui = { showErrors: false, analysisIdx: 0, analysisTimer: null, showPw: false, config: null, server: "checking", syncing: {}, walletError: "", openTx: null, combo: { open: false, active: -1, items: [] }, cal: null, adder: {}, enter: true };
+  const ui = { showErrors: false, analysisIdx: 0, analysisTimer: null, showPw: false, config: null, server: "checking", syncing: {}, walletError: "", openTx: null, docName: "", docError: "", docBusy: "", stBusy: {}, combo: { open: false, active: -1, items: [] }, cal: null, adder: {}, enter: true };
 
   function load() {
     try {
@@ -155,6 +198,40 @@
     for (const e of Object.values(s.expenses)) { if (!e.on) e.min = e.max = 0; e.on = e.max > 0; }
     delete s.expenses.jajan; delete s.income.volatility; delete s.reconcileChoice; delete s.cash;
     s.overrides = {};   // angka "bulan ini" dari halaman Tangga dihapus: pendapatan & pengeluaran hanya diubah di Profil
+    // ---- landasan milestone v1 ----
+    const rr = s.resilience;
+    rr.goalData ||= {}; rr.growth = Number(rr.growth) || 0;
+    s.sick ||= []; s.growth ||= {}; s.withdrawals ||= [];
+    s.milestones.st ||= {}; s.milestones.stLog ||= [];
+    if (s.milestones.expenseLock === undefined) s.milestones.expenseLock = null;
+    // tujuan lama dipetakan ke kelompok baru. "lunas" kini Step 2 dan "darurat" kini Step 3, jadi dilepas.
+    const GOAL_MAP = { anak: "pendidikan", kendaraan: "kendaraan", usaha: "usaha", rumah: "rumah" };
+    if (Array.isArray(rr.goals)) {
+      rr.goals = [...new Set(rr.goals.map(g => GOAL_MAP[g] || g).filter(g => GOALS.some(k => k.id === g)))];
+    }
+    if ("primaryGoal" in rr || "goalAmount" in rr || "goalSaved" in rr) {
+      const prim = GOAL_MAP[rr.primaryGoal] || rr.primaryGoal;
+      if (prim && GOALS.some(k => k.id === prim)) {
+        if (!rr.goals.includes(prim)) rr.goals.unshift(prim);
+        const d = (rr.goalData[prim] ||= {});
+        if (!d.amount && Number(rr.goalAmount) > 0) d.amount = Number(rr.goalAmount);
+        if (!d.saved && Number(rr.goalSaved) > 0) d.saved = Number(rr.goalSaved);
+      }
+      delete rr.primaryGoal; delete rr.goalAmount; delete rr.goalSaved;
+    }
+    // tunai dan rekening bank tidak lagi jadi pilihan jalur uang
+    if (Array.isArray(s.profile.channels)) s.profile.channels = s.profile.channels.filter(c => c !== "tunai" && c !== "bank");
+    delete s.profile.hasBank;
+    // BPJS tidak lagi diukur
+    delete s.profile.hasBpjsKes; delete s.profile.hasBpjsKet;
+    // utang: cicilan nyata diturunkan dari bunga + tenor kalau belum diisi, dan tanggal masuk dicatat
+    for (const d of s.debts || []) {
+      if (!d.addedAt) d.addedAt = (s.finishedAt || new Date().toISOString()).slice(0, 10);
+      if (!(Number(d.cicilan) > 0)) {
+        const b0 = Number(d.remaining) || 0, n = Number(d.months) || 0, r = (Number(d.rate) || 0) / 100;
+        if (b0 > 0 && n > 0) d.cicilan = Math.round(r > 0 ? (b0 * r) / (1 - Math.pow(1 + r, -n)) : b0 / n);
+      }
+    }
     const pr = s.profile, rs = s.resilience;
     // v3 → v4: satu kolom "Lainnya" menjadi daftar opsi buatan sendiri
     const clean = (t) => String(t || "").trim().replace(/\./g, "");
@@ -330,6 +407,15 @@
     const firstCustom = S.profile.platforms.find(isCustom);
     return id === firstCustom ? agg.byPlatform.lainnya || 0 : 0;
   }
+  // Bukti yang sah ada dua macam: e-wallet terhubung (hanya kalau jalur e-wallet yang dipilih)
+  // dan e statement yang diunggah sendiri. Dompet sisa di jalur manual tidak dihitung.
+  const isEvidence = (w) => w.source === "statement" || !!S.consent.useWallet;
+  const hasEvidence = (agg) => agg.count > 0 && S.wallets.some(w => w.summary && isEvidence(w));
+
+  // Rekening bank tidak lagi ditanyakan di Profil. Dianggap ada kalau ada buktinya:
+  // rekening bank terhubung, atau e statement yang sudah diunggah.
+  const hasBankEvidence = () => S.wallets.some(w => w.summary && (w.walletId === "bank" || w.source === "statement"));
+
   const expMidOf = (id) => { const e = S.expenses[id]; return e?.on ? (e.min + e.max) / 2 : 0; };
   const appIncomeManual = () => {
     const days = S.profile.daysPerWeek * WEEKS, inc = S.income;
@@ -345,7 +431,7 @@
   //   missing = tidak diisi, padahal ada di e-wallet
   const VTOL = 0.1;
   function verifyItems(agg = aggregate()) {
-    if (!(S.consent.useWallet && agg.count > 0)) return [];
+    if (!hasEvidence(agg)) return [];
     const R = S.verify || {}, items = [];
     const mk = (key, label, group, m, w, { lo = m, hi = m, floor = true, step } = {}) => {
       w = Math.round(w || 0); m = Math.round(m || 0);
@@ -373,7 +459,7 @@
   function calc() {
     const p = S.profile, inc = S.income, days = p.daysPerWeek * WEEKS;
     const agg = aggregate();
-    const verified = !!S.consent.useWallet && agg.count > 0;
+    const verified = hasEvidence(agg);
     const items = verifyItems(agg), it = Object.fromEntries(items.map(i => [i.key, i]));
     const lines = { income: [], expense: [] };
     const L = (arr, label, amount, src, formula) => { if (amount) arr.push({ label, amount, src, formula }); return amount; };
@@ -435,6 +521,39 @@
     return (Math.max(i.lo, i.w) + Math.max(i.hi, i.w)) / 2;
   }
 
+  // Mengisi kolom Pendapatan & Pengeluaran dari transaksi yang sudah terbukti (e-wallet atau e statement).
+  // Dijalankan sekali saja. Setelah itu angka milik pengguna, bebas diedit, dan selisihnya dinilai lewat coverage.
+  function autofillFromVerified() {
+    const agg = aggregate();
+    if (!agg.count || !agg.txCount) return null;
+    const days = Math.max(1, S.profile.daysPerWeek * WEEKS), inc = S.income;
+    const filled = { platforms: [], categories: [], harian: false, other: false };
+    for (const id of S.profile.platforms) {
+      const w = verifiedFor(id, agg);
+      if (w > 0) { inc.perPlatform[id] = r1k(w / days); filled.platforms.push(id); }
+    }
+    if (agg.incomeOther > 0) { inc.other = r1k(agg.incomeOther); filled.other = true; }
+    // hari ramai dan hari sepi diambil dari hari yang benar-benar ada pencairan
+    const d = agg.daily.filter(v => v > 0);
+    if (d.length >= 3) {
+      inc.weekAvg = r1k(d.reduce((s, v) => s + v, 0) / d.length);
+      inc.best = r1k(Math.max(...d));
+      inc.worst = r1k(Math.min(...d));
+      filled.harian = true;
+    }
+    // satu periode 30 hari hanya memberi satu angka, jadi batas bawah dan atas disamakan dulu
+    for (const c of EXPENSE_CATEGORIES) {
+      const v = agg.byCategory[c.id] || 0;
+      if (v <= 0) continue;
+      const e = S.expenses[c.id];
+      e.min = e.max = r1k(v); e.on = true;
+      filled.categories.push(c.id);
+    }
+    S.autofill = { at: new Date().toISOString(), wallets: agg.count, txCount: agg.txCount, filled };
+    delete S.overrides.income; delete S.overrides.expense;
+    return S.autofill;
+  }
+
   // Menaikkan isian supaya tidak lebih kecil dari yang sudah terbukti di e-wallet.
   function applyVerify(key, agg = aggregate()) {
     const days = S.profile.daysPerWeek * WEEKS;
@@ -453,9 +572,12 @@
   }
 
   // Jalur uang yang dipilih pengguna (Profil): e-wallet, rekening bank, tunai, atau lainnya.
-  const CHANNELS = [...WALLETS.map(w => ({ id: w.id, label: w.label, wallet: true })), { id: "tunai", label: "Tunai" }];
+  // Tunai dan rekening bank tidak lagi dipilih di Profil. Tunai dicatat di Pendapatan dan Pengeluaran,
+  // rekening bank dibuktikan lewat unggah e statement di langkah E-wallet.
+  const CHANNELS = WALLETS.filter(w => w.id !== "bank").map(w => ({ id: w.id, label: w.label, wallet: true }));
+  const LEGACY_CHANNEL = { tunai: "Tunai", bank: "Rekening bank" };
   const PLATFORM_WALLET = { gojek: "gopay", shopeefood: "shopeepay", spx: "shopeepay", grab: "ovo", maxim: "dana" };   // tebakan awal saja
-  const channelLabel = (id) => (isCustom(id) ? id.slice(2) : CHANNELS.find(c => c.id === id)?.label || id);
+  const channelLabel = (id) => (isCustom(id) ? id.slice(2) : CHANNELS.find(c => c.id === id)?.label || LEGACY_CHANNEL[id] || id);
   function channelStatus(agg = aggregate()) {
     const chosen = S.profile.channels || [];
     const connected = S.wallets.filter(w => w.summary).map(w => w.walletId);
@@ -623,6 +745,8 @@
     const monthlySave = effectiveMonthlySave();
     const saveRate = income > 0 ? monthlySave / income : 0;
     const safePlaces = r.places.filter(x => x !== "Uang tunai di rumah").length;
+    const goalCount = (r.goals || []).length;
+    const goalsWithAmount = (r.goals || []).filter(id => Number((r.goalData || {})[id]?.amount) > 0).length;
     const P = (label, pts, max, value, tip) => ({ label, pts: Math.round(clamp(pts, 0, max)), max, value, tip });
 
     const groups = [
@@ -651,14 +775,15 @@
           totalDebt ? `${rp(totalDebt)} · ${pctCap(dti)} pendapatan setahun` : "Tidak ada utang", "Total utang sebaiknya di bawah 30% pendapatan setahun."),
       ] },
       { id: "plan", label: "Rencana & proteksi", parts: [
-        P("BPJS Kesehatan", p.hasBpjsKes ? 6 : 0, 6, p.hasBpjsKes ? "Aktif" : "Belum", "BPJS Kesehatan adalah bantalan termurah saat sakit."),
-        P("BPJS Ketenagakerjaan", p.hasBpjsKet ? 5 : 0, 5, p.hasBpjsKet ? "Aktif" : "Belum", "Melindungi dari kecelakaan kerja. Ojol dapat diskon iuran 50%."),
-        P("Asuransi lain", p.hasInsurance ? 2 : 0, 2, p.hasInsurance ? "Ada" : "Tidak ada", "Opsional: asuransi kendaraan atau mikro."),
-        P("Rekening bank", p.hasBank ? 4 : 0, 4, p.hasBank ? "Ada" : "Belum", "Rekening bank dibutuhkan untuk rekam jejak dan kredit resmi."),
-        P("Tujuan yang jelas", r.primaryGoal ? (Number(r.goalAmount) > 0 ? 4 : 2) : 0, 4,
-          r.primaryGoal ? (Number(r.goalAmount) > 0 ? `Ada target ${rp(Number(r.goalAmount))}` : "Ada, belum ada nominal") : "Belum ada",
-          "Tetapkan tujuan utama beserta nominal dan tenggatnya."),
-        P("Simpanan di tempat aman", safePlaces >= 2 ? 4 : safePlaces === 1 ? 2 : 0, 4,
+        // BPJS tidak lagi diukur (semua driver dianggap terjamin). 11 poinnya dibagi ke komponen
+        // lain di pilar ini: Asuransi +3, Rekening bank +3, Tujuan +3, Simpanan aman +2.
+        P("Asuransi lain", p.hasInsurance ? 5 : 0, 5, p.hasInsurance ? "Ada" : "Tidak ada", "Asuransi kendaraan, jiwa, atau mikro menahan biaya besar yang mendadak."),
+        P("Rekening bank", hasBankEvidence() ? 7 : 0, 7, hasBankEvidence() ? "Terbukti" : "Belum ada bukti",
+          "Hubungkan rekening bank atau unggah e statement-nya di langkah E-wallet."),
+        P("Tujuan yang jelas", goalsWithAmount > 0 ? 7 : goalCount > 0 ? 4 : 0, 7,
+          goalCount ? (goalsWithAmount ? `${goalsWithAmount} tujuan punya nominal` : "Ada, belum ada nominal") : "Belum ada",
+          "Tetapkan tujuan beserta nominal dan tenggatnya."),
+        P("Simpanan di tempat aman", safePlaces >= 2 ? 6 : safePlaces === 1 ? 3 : 0, 6,
           `${safePlaces} tempat selain uang tunai`, "Simpan di rekening/e-wallet terpisah. Uang tunai di rumah mudah terpakai."),
       ] },
     ];
@@ -876,20 +1001,28 @@
   }
 
   // ---------- Server API ----------
+  let apiOffline = false;
   async function api(path, { method = "GET", body } = {}) {
-    let res;
+    // Sudah terbukti tidak ada server: langsung ke mode contoh, supaya tidak memanggil /api yang pasti gagal.
+    if (apiOffline && window.LajuDemo) return window.LajuDemo.handle(path, { method, body });
+    let res = null;
     try {
       res = await fetch(path, {
         method, credentials: "same-origin",
         headers: { "X-Requested-With": "laju", ...(body ? { "Content-Type": "application/json" } : {}) },
         body: body ? JSON.stringify(body) : undefined,
       });
-    } catch (e) {
-      throw Object.assign(new Error("Server Laju tidak bisa dihubungi."), { code: "offline" });
+    } catch (e) { res = null; }   // server tidak bisa dihubungi
+    if (res) {
+      const data = await res.json().catch(() => null);
+      if (res.ok && data) return data;
+      // jawaban API Laju yang berisi error tetap diteruskan apa adanya
+      if (data?.error) throw Object.assign(new Error(data.error.message), { code: data.error.code });
     }
-    const data = await res.json().catch(() => null);
-    if (!res.ok || !data) throw Object.assign(new Error(data?.error?.message || "Server Laju tidak merespons dengan benar."), { code: data?.error?.code || `http_${res.status}` });
-    return data;
+    // Bukan jawaban API Laju: halaman dibuka tanpa server (mis. dari GitHub Pages).
+    // Mode contoh melayani sendiri di browser supaya e-wallet tetap bisa didemokan.
+    if (window.LajuDemo) { apiOffline = true; return window.LajuDemo.handle(path, { method, body }); }
+    throw Object.assign(new Error("Server Laju tidak bisa dihubungi."), { code: "offline" });
   }
 
   // Tiga data contoh driver, dipakai tombol "Isi contoh" dan "Data contoh".
@@ -901,30 +1034,30 @@
     const demos = [
       {   // di bawah rata-rata: minus tiap bulan, utang bunga tinggi berlapis, tanpa bantalan & proteksi
         account: { fullName: "Andi Saputra", phone: "085711223344", password: "contoh1234", city: "Bekasi" },
-        profile: { platforms: ["maxim", "grab"], vehicle: "motor", ownership: "sewa", hoursPerDay: 11, daysPerWeek: 6, area: "Bekasi Timur", status: "menikah", dependents: 2, sideJobs: [], hasBank: false, hasBpjsKes: true, hasBpjsKet: false, hasInsurance: false, channels: ["ovo", "dana", "tunai"], recordsIncome: "kadang" },
+        profile: { platforms: ["maxim", "grab"], vehicle: "motor", ownership: "sewa", hoursPerDay: 11, daysPerWeek: 6, area: "Bekasi Timur", status: "menikah", dependents: 2, sideJobs: [], hasInsurance: false, channels: ["ovo", "dana"], recordsIncome: "kadang" },
         consent,
 income: { perPlatform: { maxim: 90000, grab: 70000 }, bonus: 100000, tips: 50000, other: 0, weekAvg: 160000, best: 300000, worst: 60000 },
         expenses: demoExpenses({ makan: [1500000, 1900000], kontrakan: [800000, 900000], listrik: [200000, 300000], sekolah: [150000, 300000], bbm: [900000, 1300000], servis: [100000, 250000], pulsa: [100000, 150000], parkir: [50000, 100000], rokok: [400000, 600000], sosial: [100000, 200000] }),
         debts: [{ type: "Pinjol", remaining: 3500000, months: "", rate: "", due: nextOn(10) }, { type: "Paylater", remaining: 1200000, months: 3, rate: "3", due: nextOn(20) }, { type: "Rentenir", remaining: 2000000, months: 4, rate: "10", due: nextOn(7) }],
-        resilience: { savings: 50000, goalSaved: 0, monthlySave: 0, habit: "never", places: ["Uang tunai di rumah"], shock: "none", goals: ["lunas", "darurat"], primaryGoal: "lunas", horizon: 12, goalAmount: 6700000, wantsBankLoan: false },
+        resilience: { savings: 50000, growth: 0, monthlySave: 0, habit: "never", places: ["Uang tunai di rumah"], shock: "none", goals: ["pendidikan"], goalData: { pendidikan: { amount: 6700000, saved: 0 } }, horizon: 12, wantsBankLoan: false },
       },
       {   // sekitar rata-rata
         account: { fullName: "Sudirman Hasibuan", phone: "081234567890", password: "contoh1234", city: "Pekanbaru" },
-        profile: { platforms: ["gojek", "shopeefood"], vehicle: "motor", ownership: "kredit", hoursPerDay: 10, daysPerWeek: 6, area: "Panam & Sudirman", status: "menikah", dependents: 3, sideJobs: ["Warung"], hasBank: true, hasBpjsKes: true, hasBpjsKet: false, hasInsurance: false, channels: ["gopay", "shopeepay", "bank", "tunai"], recordsIncome: "kadang" },
+        profile: { platforms: ["gojek", "shopeefood"], vehicle: "motor", ownership: "kredit", hoursPerDay: 10, daysPerWeek: 6, area: "Panam & Sudirman", status: "menikah", dependents: 3, sideJobs: ["Warung"], hasInsurance: false, channels: ["gopay", "shopeepay"], recordsIncome: "kadang" },
         consent,
 income: { perPlatform: { gojek: 135000, shopeefood: 50000 }, bonus: 300000, tips: 120000, other: 900000, weekAvg: 185000, best: 280000, worst: 90000 },
         expenses: demoExpenses(Object.fromEntries(EXPENSE_CATEGORIES.filter(c => !c.off).map(c => [c.id, [c.min, c.max]]))),   // angka umum per kategori
         debts: [{ type: "Pinjol", remaining: 2400000, months: 6, rate: "4", due: nextOn(15) }, { type: "Cicilan", remaining: 9600000, months: 12, rate: "1.6", due: nextOn(5) }],
-        resilience: { savings: 650000, goalSaved: 0, monthlySave: 200000, habit: "sisa", places: ["E-wallet", "Uang tunai di rumah", "Arisan"], shock: "borrow", goals: ["usaha", "lunas", "darurat"], primaryGoal: "usaha", horizon: 18, goalAmount: 5000000, wantsBankLoan: true },
+        resilience: { savings: 650000, growth: 0, monthlySave: 200000, habit: "sisa", places: ["E-wallet", "Uang tunai di rumah", "Arisan"], shock: "borrow", goals: ["usaha"], goalData: { usaha: { amount: 5000000, saved: 0 } }, horizon: 18, wantsBankLoan: true },
       },
       {   // di atas rata-rata: surplus sehat, dana darurat penuh, proteksi lengkap, utang murah
         account: { fullName: "Wayan Sudarsana", phone: "081999887766", password: "contoh1234", city: "Denpasar" },
-        profile: { platforms: ["gojek", "grab"], vehicle: "motor", ownership: "lunas", hoursPerDay: 9, daysPerWeek: 6, area: "Denpasar Selatan", status: "menikah", dependents: 2, sideJobs: ["Jualan online"], hasBank: true, hasBpjsKes: true, hasBpjsKet: true, hasInsurance: false, channels: ["gopay", "ovo", "bank"], recordsIncome: "kadang" },
+        profile: { platforms: ["gojek", "grab"], vehicle: "motor", ownership: "lunas", hoursPerDay: 9, daysPerWeek: 6, area: "Denpasar Selatan", status: "menikah", dependents: 2, sideJobs: ["Jualan online"], hasInsurance: false, channels: ["gopay", "ovo"], recordsIncome: "kadang" },
         consent,
 income: { perPlatform: { gojek: 160000, grab: 110000 }, bonus: 400000, tips: 150000, other: 1200000, weekAvg: 270000, best: 310000, worst: 230000 },
         expenses: demoExpenses({ makan: [1600000, 2000000], kontrakan: [700000, 700000], listrik: [200000, 300000], sekolah: [150000, 250000], kirim: [200000, 300000], bbm: [800000, 1000000], servis: [100000, 200000], pulsa: [100000, 150000], parkir: [50000, 100000], sosial: [100000, 200000] }),
         debts: [{ type: "Bank", remaining: 3000000, months: 10, rate: "0.5", due: nextOn(25) }],
-        resilience: { savings: 12000000, goalSaved: 6500000, monthlySave: 1200000, habit: "rutin", places: ["Rekening bank", "E-wallet", "Emas"], shock: "ok", goals: ["rumah", "anak", "usaha"], primaryGoal: "rumah", horizon: 24, goalAmount: 20000000, wantsBankLoan: true },
+        resilience: { savings: 12000000, growth: 0, monthlySave: 1200000, habit: "rutin", places: ["Rekening bank", "E-wallet", "Emas"], shock: "ok", goals: ["rumah", "pendidikan", "usaha"], goalData: { rumah: { amount: 20000000, saved: 6500000 } }, horizon: 24, wantsBankLoan: true },
       },
     ];
     return deepMerge(fresh(), demos[clamp(variant, 0, demos.length - 1)]);
@@ -964,11 +1097,39 @@ income: { perPlatform: { gojek: 160000, grab: 110000 }, bonus: 400000, tips: 150
   const DEBT_RATE_GUESS = { Pinjol: 3, Paylater: 3, Rentenir: 10 };
   const debtRate = (d) => (Number(d.rate) > 0 ? Number(d.rate) : DEBT_RATE_GUESS[d.type] || 0);
   const debtOpen = (d) => (Number(d.remaining) || 0) > 0;
-  const isHighCost = (d) => HIGH_COST.includes(d.type) || Number(d.rate) >= 2;
-  const debtInstallment = (d) => {   // cicilan per bulan; bila lama cicilan kosong, diasumsikan 12 bulan
-    const b = Number(d.remaining) || 0, m = Number(d.months) || 0;
+  const debtPrincipal = (d) => Number(d.remaining) || 0;
+  const debtTenor = (d) => Number(d.months) || 0;
+  const debtPayment = (d) => Number(d.cicilan) || 0;   // cicilan yang diisi pengguna
+  const debtInstallment = (d) => {   // yang dipakai hitungan: isian pengguna, atau perkiraan sisa / tenor
+    const pay = debtPayment(d); if (pay > 0) return pay;
+    const b = debtPrincipal(d), m = debtTenor(d);
     return b <= 0 ? 0 : m > 0 ? b / m : b / 12;
   };
+
+  // Bunga efektif per tahun dari pokok, cicilan, dan tenor (bisection pada nilai sekarang anuitas).
+  // null kalau datanya kurang, dan menurut aturan tim data kurang dianggap bunga tinggi.
+  function effectiveAPR(pokok, cicilan, tenor) {
+    pokok = Number(pokok) || 0; cicilan = Number(cicilan) || 0; tenor = Number(tenor) || 0;
+    if (!(pokok > 0 && cicilan > 0 && tenor > 0)) return null;
+    if (cicilan * tenor <= pokok) return 0;                       // tidak ada bunga
+    const pv = (r) => (r <= 1e-9 ? cicilan * tenor : (cicilan * (1 - Math.pow(1 + r, -tenor))) / r);
+    let lo = 0, hi = 1;
+    while (pv(hi) > pokok && hi < 1e4) hi *= 2;
+    for (let i = 0; i < 100; i++) { const mid = (lo + hi) / 2; if (pv(mid) > pokok) lo = mid; else hi = mid; }
+    return ((lo + hi) / 2) * 12;
+  }
+  const AUTO_HIGH = ["Pinjol", "Paylater", "Rentenir", "Kartu kredit"];
+  const isFamilyDebt = (d) => /keluarga|teman/i.test(debtTypeLabel(d));
+  function isHighInterest(d) {
+    if (AUTO_HIGH.includes(d.type)) return true;
+    if (isFamilyDebt(d)) return false;                            // tidak menahan Step 2, tapi wajib punya jadwal bayar
+    const apr = effectiveAPR(debtPrincipal(d), debtPayment(d), debtTenor(d));
+    if (apr !== null) return apr >= MILESTONE.HIGH_INTEREST_APR;
+    const r = Number(d.rate) || 0;                                // cicilan belum diisi: pakai bunga kalau ada
+    return r > 0 ? (r / 100) * 12 >= MILESTONE.HIGH_INTEREST_APR : true;
+  }
+  const isHighCost = isHighInterest;   // nama lama masih dipakai beberapa tempat
+  const needsSchedule = (d) => isFamilyDebt(d) && debtOpen(d) && !String(d.jadwalBayar || "").trim();
   // avalanche = bunga termahal dulu (paling hemat); snowball = sisa terkecil dulu (paling memotivasi)
   const DEBT_METHODS = {
     avalanche: { label: "Bunga termahal dulu", why: "Paling hemat bunga.", order: (a, b) => debtRate(b) - debtRate(a) || Number(a.remaining) - Number(b.remaining) },
@@ -1033,10 +1194,10 @@ income: { perPlatform: { gojek: 160000, grab: 110000 }, bonus: 400000, tips: 150
     });
   }
   function dataTrust() {
-    const live = S.wallets.filter(w => w.summary && !w.stale), stale = S.wallets.filter(w => w.summary && w.stale);
+    const live = S.wallets.filter(w => w.summary && !w.stale && isEvidence(w)), stale = S.wallets.filter(w => w.summary && w.stale && isEvidence(w));
     const reasons = [], ew = editUrl("ewallet");
     const add = (t, act = null) => reasons.push({ t, act });
-    if (!S.consent.useWallet || !live.length) {   // Kasus A2, A4, B2
+    if (!live.length) {   // Kasus A2, A4, B2
       const tier = S.finished ? 3 : 0;
       if (stale.length) add(`Izin ${stale.map(w => channelLabel(w.walletId)).join(", ")} sudah berakhir. Hubungkan lagi untuk membuka pengajuan.`, { href: ew, label: "Hubungkan lagi" });
       else add("Belum ada e-wallet atau rekening yang terhubung. Isian manual hanya dipakai untuk panduan.", { href: ew, label: "Hubungkan e-wallet" });
@@ -1075,16 +1236,18 @@ income: { perPlatform: { gojek: 160000, grab: 110000 }, bonus: 400000, tips: 150
       c, h, openDebts, highDebts,
       net: c.income - c.expense,
       emergency: Number(S.resilience.savings) || 0,
-      goalSaved: Number(S.resilience.goalSaved) || 0,
+      goalSaved: (S.resilience.goals || []).reduce((t, id) => t + (Number((S.resilience.goalData || {})[id]?.saved) || 0), 0),
+      growth: Number(S.resilience.growth) || 0,
       monthlySave: effectiveMonthlySave(),
       totalDebt: openDebts.reduce((s, d) => s + Number(d.remaining), 0),
       highTotal: highDebts.reduce((s, d) => s + Number(d.remaining), 0),
-      goal: S.resilience.primaryGoal || "",
+      goal: (S.resilience.goals || [])[0] || "",
     };
     // jumlah utang tertinggi yang pernah tercatat → dasar menghitung "sudah dibayar"
     const bl = S.milestones.baseline;
     bl.high = Math.max(bl.high || bl.bunga || 0, x.highTotal);
     bl.all = Math.max(bl.all || bl.nolutang || 0, x.totalDebt);
+    x.t = stepTargets(x);
     x.alloc = allocation(x);
     x.lane = debtLane(x);
     return x;
@@ -1095,43 +1258,50 @@ income: { perPlatform: { gojek: 160000, grab: 110000 }, bonus: 400000, tips: 150
   // tidak ditutup pinjol baru, (2) serang utang bunga tinggi, (3) lengkapi dana darurat
   // 3 bulan, (4) kejar tujuan & investasi. Tujuan utama pengguna menggeser porsinya.
   const ALLOC_META = {
-    emergency: { label: "Dana darurat", color: "var(--viz-in)" },
+    emergency: { label: "Uang beku", color: "var(--viz-in)" },
     debt: { label: "Tambahan bayar utang", color: "var(--viz-debt)" },
     goal: { label: "Tabungan tujuan", color: "var(--viz-out)" },
-    invest: { label: "Tabungan jangka panjang", color: "var(--fg)" },
+    growth: { label: "Uang tumbuh", color: "var(--fg)" },
   };
+  // Porsi mengikuti step yang sedang dikerjakan, sesuai landasan milestone v1.
   function allocation(x) {
-    const net = x.net, perMonthDays = S.profile.daysPerWeek * WEEKS;
+    const net = x.net, perMonthDays = S.profile.daysPerWeek * WEEKS, t = x.t;
     if (net <= 0) return { phase: "minus", title: "Tutup kekurangan dulu", why: `Bulan ini pengeluaran lebih besar ${rp(-net)} dari pendapatan. Semua usaha diarahkan untuk menutup selisih itu.`, net, items: [] };
-    const hasHigh = x.highDebts.length > 0, hasDebt = x.openDebts.length > 0;
-    const starter = x.emergency >= 1e6, full = x.emergency >= 3 * x.c.expense;
+    const st = S.milestones.st || {}, stat = (id) => st[id]?.status || "";
+    const hasHigh = x.highDebts.length > 0;
+    const wajib = goalsOf("wajib"), tumbuh = goalsOf("tumbuh");
     let phase, title, why, w;
-    if (!starter) {
-      phase = "bantalan"; title = "Bangun bantalan Rp1 juta dulu";
-      why = "Tanpa bantalan, satu biaya mendadak (servis, sakit) biasanya ditutup pinjol baru. Bantalan kecil memutus lingkaran itu.";
-      w = hasHigh ? { emergency: 0.7, debt: 0.3 } : hasDebt ? { emergency: 0.8, debt: 0.2 } : { emergency: 0.9, goal: 0.1 };
-    } else if (hasHigh) {
-      phase = "serang"; title = "Serang utang bunga tinggi";
-      why = "Bunga pinjol/paylater bisa ±3% per bulan. Melunasinya sama dengan 'untung' ±36% setahun, lebih besar dari tabungan mana pun.";
-      w = { debt: 0.7, emergency: 0.2, goal: 0.1 };
-    } else if (!full) {
-      phase = "darurat"; title = "Lengkapi dana darurat 3 bulan";
-      why = "Pendapatan ojol naik-turun. Dana darurat 3 bulan menjaga Anda tetap aman saat order sepi panjang atau motor rusak.";
-      w = hasDebt ? { emergency: 0.6, debt: 0.2, goal: 0.2 } : { emergency: 0.6, goal: 0.4 };
+    if (stat("bantalan") === "isi_ulang" || stat("darurat") === "isi_ulang") {
+      phase = "isi_ulang"; title = "Isi ulang uang beku";
+      why = "Uang beku terpakai untuk keadaan darurat yang sah. Sebagian sisa uang diarahkan untuk mengisinya lagi.";
+      w = { emergency: MILESTONE.REFILL_SHARE };
+      const rest = 1 - MILESTONE.REFILL_SHARE;
+      if (hasHigh) w.debt = rest; else if (wajib.length) w.goal = rest; else w.emergency += rest;
+    } else if (stat("bantalan") !== "selesai") {
+      phase = "bantalan"; title = `Bantalan ${rpShort(t.buffer)} dan lunasi utang bunga tinggi`;
+      why = hasHigh
+        ? "Selama masih ada utang bunga tinggi, sebagian besar sisa uang dipakai melunasinya. Sisanya membangun bantalan supaya biaya mendadak tidak ditutup pinjol baru."
+        : "Utang bunga tinggi sudah bersih. Semua sisa uang sekarang membangun bantalan.";
+      w = hasHigh ? { debt: MILESTONE.STEP2_SPLIT_DEBT, emergency: MILESTONE.STEP2_SPLIT_BUFFER } : { emergency: 1 };
+    } else if (stat("darurat") !== "selesai") {
+      phase = "darurat"; title = "Lengkapi dana darurat";
+      why = "Pendapatan ojol naik-turun. Dana darurat menjaga Anda saat order sepi panjang, sakit, atau motor rusak.";
+      const gs = wajib.length ? MILESTONE.STEP3_GOAL_MAX_SHARE : 0;   // tujuan wajib dibatasi
+      w = { emergency: 1 - gs, goal: gs };
+    } else if (stat("investasi") !== "selesai") {
+      phase = "investasi"; title = "Mulai uang tumbuh";
+      why = `Fondasi sudah aman. Sisihkan ${pct(MILESTONE.STEP4_INVEST_RATIO)} pendapatan ke uang tumbuh, ${MILESTONE.STEP4_STREAK_MONTHS} bulan berturut-turut.`;
+      const share = Math.min(1, t.invest / net);
+      w = { growth: share, goal: Math.max(0, 1 - share) };
     } else {
-      phase = "tujuan"; title = "Kejar tujuan utama";
-      why = "Fondasi sudah aman. Sisa uang sekarang bisa bekerja untuk tujuan Anda.";
-      w = hasDebt ? { goal: 0.6, debt: 0.2, invest: 0.2 } : { goal: 0.6, invest: 0.4 };
+      phase = "tumbuh"; title = "Kejar tujuan tumbuh";
+      why = "Semua fondasi selesai. Sisa uang sekarang bisa bekerja untuk tujuan jangka panjang Anda.";
+      w = tumbuh.length ? { goal: 0.6, growth: 0.4 } : { growth: 1 };
     }
-    // tujuan utama menggeser porsi (tidak di fase bantalan, supaya bantalan tetap jadi prioritas)
-    const shift = (from, to, amt) => { const a = Math.min(w[from] || 0, amt); if (a > 0) { w[from] -= a; w[to] = (w[to] || 0) + a; } };
-    if (phase !== "bantalan") {
-      if (x.goal === "lunas" && hasDebt) { shift("goal", "debt", 0.15); shift("invest", "debt", 0.1); }
-      if (x.goal === "darurat") { shift("goal", "emergency", 0.15); shift("invest", "emergency", 0.1); }
-    }
+    if (hasHigh && !w.debt && phase !== "bantalan") { w.debt = 0.2; w.emergency = Math.max(0, (w.emergency || 0) - 0.2); }
     const items = Object.entries(w).filter(([, v]) => v > 0.001).map(([key, v]) => ({
       key, share: v, amount: Math.round((net * v) / 1000) * 1000, perDay: Math.round((net * v) / perMonthDays / 500) * 500, ...ALLOC_META[key],
-    })).sort((a, b) => b.share - a.share);
+    })).sort((a2, b2) => b2.share - a2.share);
     return { phase, title, why, net, items };
   }
   const allocAmount = (x, key) => x.alloc.items.find(i => i.key === key)?.amount || 0;
@@ -1156,157 +1326,301 @@ income: { perPlatform: { gojek: 160000, grab: 110000 }, bonus: 400000, tips: 150
     };
   }
 
-  // ---------- definisi langkah ----------
-  const GOAL_STEPS = {
-    lunas: { title: "Tujuan utama: bebas semua utang", caption: "Semua utang konsumtif lunas, sesuai tujuan yang Anda pilih.", kind: "debtall" },
-    darurat: { title: "Tujuan utama: dana darurat 6 bulan", caption: "Bantalan penuh untuk pendapatan yang naik-turun.", kind: "emergency6" },
-    kendaraan: { title: "Tujuan utama: kendaraan milik sendiri", caption: "Dana untuk uang muka atau pelunasan kendaraan.", kind: "pot" },
-    usaha: { title: "Tujuan utama: modal usaha sampingan", caption: "Modal awal supaya pemasukan tidak hanya dari narik.", kind: "pot" },
-    anak: { title: "Tujuan utama: biaya pendidikan anak", caption: "Dana sekolah yang disiapkan sebelum dibutuhkan.", kind: "pot" },
-    rumah: { title: "Tujuan utama: rumah / renovasi", caption: "Dana untuk rumah atau perbaikan rumah.", kind: "pot" },
-    "": { title: "Tujuan utama: tabungan tujuan", caption: "Pilih tujuan utama di Profil › Tujuan supaya langkah ini lebih tepat.", kind: "pot" },
-  };
+  // ---------- definisi step (landasan milestone v1) ----------
+  // Step 0 sampai 5 menggantikan tangga 8 langkah. Rapor tetap di ujung.
+  const STEP_IDS = ["data", "minus", "bantalan", "darurat", "investasi", "tumbuh"];
+  const ymOf = (d) => isoOf(d).slice(0, 7);
+  const daysBetween = (aIso, bIso) => Math.round((parseIso(bIso) - parseIso(aIso)) / 864e5);
 
-  const fmtMonths = (m) => `${m.toFixed(1).replace(".", ",")} bln`;
-  function savingsStep(x, target, label) {
-    const s = x.emergency;
+  // Pengeluaran bulanan dikunci tiap awal bulan, supaya target dana darurat tidak bergeser tiap hari.
+  function lockedMonthlyExpense(c) {
+    const ym = ymOf(new Date()), L = S.milestones.expenseLock;
+    if (L && L.ym === ym && L.value > 0) return L.value;
+    const value = Math.round(c.expense);
+    if (value > 0) S.milestones.expenseLock = { ym, value };
+    return value || Math.round(c.expense);
+  }
+
+  // Net 30 hari bergulir. Dipakai transaksi kalau ada buktinya (e-wallet atau e statement),
+  // kalau belum ada bukti dipakai angka bulanan dari isian.
+  function rollingNet(c) {
+    const agg = c.agg;
+    if (c.verified && agg.txCount) {
+      const masuk = (agg.incomePlatform || 0) + (agg.incomeOther || 0);
+      const keluar = (agg.expenseTotal || 0) + (agg.debtPayments || 0);
+      return { net: masuk - keluar, income: masuk, source: "transaksi" };
+    }
+    return { net: c.income - c.expense, income: c.income, source: "isian" };
+  }
+
+  const frozenMoney = () => Number(S.resilience.savings) || 0;          // bantalan Step 2 + dana darurat Step 3
+  const growthMoney = () => Number(S.resilience.growth) || 0;           // uang tumbuh Step 4
+
+  // Mode Sakit: hari di dalam rentang ini tidak memicu kemunduran Step 1.
+  const sickRanges = () => S.sick || [];
+  const sickNow = () => sickRanges().some(r => !r.to);
+  const sickOn = (iso) => sickRanges().some(r => r.from <= iso && (!r.to || iso <= r.to));
+
+  // Setoran uang tumbuh per bulan, untuk hitungan beruntun Step 4.
+  function investStreak(target) {
+    const g = S.growth || {};
+    let streak = 0;
+    for (let i = 1; i <= 24; i++) {
+      const d = new Date(); d.setMonth(d.getMonth() - i);
+      const v = Number(g[ymOf(d)]) || 0;
+      if (target > 0 && v >= target) streak++; else break;
+    }
+    const thisMonth = Number(g[ymOf(new Date())]) || 0;
+    return { streak, thisMonth, done: streak >= MILESTONE.STEP4_STREAK_MONTHS };
+  }
+
+  // Pengambilan uang beku terakhir yang bukan darurat sah, untuk menilai kemunduran.
+  const lastNonEmergency = () => [...(S.withdrawals || [])].reverse().find(w => !isEmergencyReason(w.reason));
+  const hasOpenRefill = () => !!S.milestones.refillSince;
+
+  const goalsOf = (group) => (S.resilience.goals || []).filter(id => goalGroup(id) === group);
+  const goalInfo = (id) => (S.resilience.goalData || {})[id] || {};
+  const goalSavedOf = (id) => Number(goalInfo(id).saved) || 0;
+  const goalAmountOf = (id) => Number(goalInfo(id).amount) || 0;
+  const goalDone = (id) => goalAmountOf(id) > 0 && goalSavedOf(id) >= goalAmountOf(id);
+
+  function stepTargets(x) {
+    const expense = lockedMonthlyExpense(x.c);
+    const r = rollingNet(x.c);
     return {
-      progress: target > 0 ? Math.round((s / target) * 100) : 100,
-      cur: { label: "Dana darurat sekarang", value: rp(s) }, tgt: { label: "Target", value: label },
-      gap: s < target ? `Kurang ${rp(target - s)}` : "",
-      bar: { kind: "fill", cur: s, tgt: target, curLabel: "Dana darurat", tgtLabel: "Target", fmt: rp },
-      criteria: [{ label: `Dana darurat ≥ ${rp(target)}`, met: s >= target, value: rp(s) }],
-      short: `${rpShort(s)} dari ${rpShort(target)}`, pot: "emergency", target,
+      expense,
+      buffer: MILESTONE.STEP2_BUFFER_TARGET,
+      dd: ddMonths(Number(S.profile.dependents) || 0) * expense,
+      invest: Math.round(MILESTONE.STEP4_INVEST_RATIO * r.income),
+      rolling: r,
     };
   }
 
+  // Syarat selesai dan syarat mundur tiap step, tanpa memperhitungkan masa bertahan.
+  function stepRules(x) {
+    const t = x.t, frozen = frozenMoney(), high = x.highDebts.length;
+    const inv = investStreak(t.invest);
+    const wajib = goalsOf("wajib"), tumbuh = goalsOf("tumbuh");
+    return {
+      data: { met: !!S.finished, regress: false },
+      minus: { met: t.rolling.net >= MILESTONE.STEP1_MIN_NET_RATIO * t.rolling.income, regress: t.rolling.net < 0 && !sickNow() },
+      bantalan: { met: frozen >= t.buffer && high === 0, low: frozen < MILESTONE.STEP2_BUFFER_REGRESS },
+      darurat: { met: frozen >= t.dd, low: frozen < MILESTONE.STEP3_REGRESS_RATIO * t.dd },
+      investasi: { met: inv.done, inv, regress: !!S.milestones.growthSpent },
+      tumbuh: { met: tumbuh.length > 0 && tumbuh.every(goalDone), goals: tumbuh, wajib },
+    };
+  }
+
+  // Mesin status: terkunci, aktif, selesai, isi_ulang, dijeda, dibuka_lagi.
+  // Saldo dan riwayat tidak pernah dihapus, hanya statusnya yang berubah.
+  function evaluateStatus(x) {
+    const st = (S.milestones.st ||= {});
+    const log = (S.milestones.stLog ||= []);
+    const today = isoOf(new Date());
+    const rules = stepRules(x);
+    // Diubah di tempat, bukan diganti objek baru, supaya penanda seperti clearedAt dan lowSince ikut terbawa.
+    const set = (id, status, why) => {
+      const cur = st[id]?.status || "";
+      if (cur === status) return;
+      const e = (st[id] ||= { status: "", since: today });
+      e.status = status; e.since = today;
+      log.push({ d: today, id, from: cur, to: status, why: why || "" });
+      if (log.length > 200) log.splice(0, log.length - 200);
+    };
+
+    // 1. kemunduran dan masa bertahan, dinilai dari bawah ke atas
+    let reopened = "";
+    for (const id of STEP_IDS) {
+      const r = rules[id], cur = st[id]?.status || "";
+      const entry = (st[id] ||= { status: "", since: today });
+
+      // uang beku di bawah ambang karena pengambilan bukan darurat: dicatat sejak kapan
+      if (r.low !== undefined) {
+        const nonEmg = lastNonEmergency();
+        if (r.low && nonEmg) entry.lowSince ||= today;
+        if (!r.low) delete entry.lowSince;
+      }
+      const lowTooLong = entry.lowSince && daysBetween(entry.lowSince, today) >= MILESTONE.REGRESS_WINDOW_DAYS;
+      // utang yang masuk pada hari step dinyatakan bersih pun tetap dihitung baru
+      const newHigh = id === "bantalan" && entry.clearedAt && x.highDebts.some(d => (d.addedAt || "") >= entry.clearedAt);
+      const mundur = r.regress || lowTooLong || newHigh;
+
+      if (mundur && (cur === "selesai" || cur === "isi_ulang")) {
+        set(id, "dibuka_lagi", newHigh ? "utang bunga tinggi baru" : lowTooLong ? "uang beku turun lama" : "syarat tidak lagi terpenuhi");
+        reopened = reopened || id;
+        continue;
+      }
+      if (cur === "dibuka_lagi" && !mundur && r.met) { set(id, "selesai", "syarat terpenuhi lagi"); continue; }
+      if (cur === "dibuka_lagi") continue;
+
+      // masa bertahan hanya untuk Step 2 dan 3
+      const needHold = id === "bantalan" || id === "darurat";
+      if (r.met) {
+        if (!needHold) { if (cur !== "selesai") set(id, "selesai", "syarat terpenuhi"); }
+        else {
+          entry.holdFrom ||= today;
+          if (daysBetween(entry.holdFrom, today) >= MILESTONE.HOLD_DAYS) {
+            if (cur !== "selesai" && cur !== "isi_ulang") { set(id, "selesai", `bertahan ${MILESTONE.HOLD_DAYS} hari`); entry.clearedAt = today; }
+          } else if (cur !== "selesai" && cur !== "isi_ulang") set(id, "aktif", "menunggu masa bertahan");
+        }
+      } else {
+        delete entry.holdFrom;
+        // Batas mundur selalu lebih rendah dari batas selesai, jadi turun sedikit tidak membatalkan step.
+        // Hanya pengambilan darurat yang sah yang menandainya sedang diisi ulang.
+        if (needHold && cur === "selesai" && (S.withdrawals || []).some(w => isEmergencyReason(w.reason))) {
+          set(id, "isi_ulang", "uang beku dipakai untuk darurat, sedang diisi lagi");
+        }
+      }
+    }
+
+    // 2. step di atas step yang dibuka lagi menjadi dijeda, yang di bawahnya mengunci urutan
+    let blocked = false;
+    for (const id of STEP_IDS) {
+      const cur = st[id]?.status || "";
+      if (blocked) { if (cur !== "dijeda") set(id, "dijeda", "menunggu step sebelumnya"); continue; }
+      if (cur === "dibuka_lagi") { blocked = true; continue; }
+      if (cur === "dijeda") set(id, rules[id].met ? "selesai" : "aktif", "step sebelumnya pulih");
+    }
+
+    // 3. yang belum punya status: terkunci sampai step sebelumnya selesai
+    let prevDone = true;
+    for (const id of STEP_IDS) {
+      const cur = st[id]?.status || "";
+      const done = cur === "selesai" || cur === "isi_ulang";
+      if (!cur) set(id, prevDone ? "aktif" : "terkunci", "");
+      else if (cur === "terkunci" && prevDone) set(id, "aktif", "step sebelumnya selesai");
+      prevDone = done || (st[id]?.status === "selesai" || st[id]?.status === "isi_ulang");
+    }
+    return st;
+  }
+
+  // Kelas CSS lama dipertahankan supaya tampilan tangga tidak perlu ditulis ulang.
+  const stepCls = (st) => ({ selesai: "done", isi_ulang: "done", aktif: "active", dibuka_lagi: "active" }[st] || "next");
+  const stepLocked = (st) => st === "terkunci" || st === "dijeda";
+
+  const STATUS_META = {
+    terkunci: { label: "Terkunci", tone: "muted" },
+    aktif: { label: "Sedang dikerjakan", tone: "warn" },
+    selesai: { label: "Selesai", tone: "good" },
+    isi_ulang: { label: "Sedang diisi ulang", tone: "warn" },
+    dijeda: { label: "Dijeda", tone: "muted" },
+    dibuka_lagi: { label: "Dibuka lagi", tone: "serious" },
+  };
+
   function stepDefs(x) {
-    const { c, h } = x;
-    const g = GOAL_STEPS[x.goal] || GOAL_STEPS[""];
-    const goalAmt = Number(S.resilience.goalAmount) || 0;
-    const prot = { kes: !!S.profile.hasBpjsKes, ket: !!S.profile.hasBpjsKet };
-    const t10 = Math.round((0.1 * c.income) / 1000) * 1000;
-    const trust = dataTrust();
-    const steps = [
+    const t = x.t, c = x.c, rules = stepRules(x);
+    const frozen = frozenMoney(), high = x.highDebts, inv = rules.investasi.inv;
+    const wajib = goalsOf("wajib"), tumbuh = goalsOf("tumbuh");
+    const pot = (ids) => ids.reduce((s, id) => s + goalSavedOf(id), 0);
+    const potTarget = (ids) => ids.reduce((s, id) => s + goalAmountOf(id), 0);
+
+    return [
       {
-        id: "fondasi", title: "Fondasi: data rapi", pillar: "Arus kas", tool: "fondasi",
+        id: "data", number: 0, title: "Data rapi", pillar: "Arus kas", tool: "fondasi",
         caption: "Semua pendapatan dan pengeluaran tercatat di satu tempat.", explain: "100% saat onboarding sudah disimpan.",
         progress: S.finished ? 100 : 50,
-        cur: { label: "Status sekarang", value: S.finished ? "Data lengkap" : "Belum lengkap" }, tgt: { label: "Target", value: "Onboarding selesai" },
+        cur: { label: "Status sekarang", value: S.finished ? "Data lengkap" : "Belum lengkap" },
+        tgt: { label: "Target", value: "Onboarding selesai" },
         gap: S.finished ? "" : "Selesaikan onboarding",
         bar: { kind: "fill", cur: S.finished ? 1 : 0.5, tgt: 1, fmt: (v) => `${Math.round(v * 100)}%` },
-        criteria: [{ label: "Onboarding selesai", met: S.finished }, { label: "E-wallet terhubung (disarankan, tidak wajib)", met: c.verified, optional: true }],
+        criteria: [{ label: "Onboarding selesai", met: !!S.finished },
+          { label: "E-wallet atau dokumen terhubung (disarankan)", met: c.verified, optional: true }],
         short: S.finished ? "Data lengkap" : "Belum lengkap",
       },
       {
-        id: "minus", title: "Keluar dari minus", pillar: "Arus kas", tool: "cashflow",
-        caption: "Pendapatan menutup semua pengeluaran dan cicilan setiap bulan.", explain: "pendapatan ÷ (pengeluaran + cicilan).",
-        progress: c.expense > 0 ? Math.round((c.income / c.expense) * 100) : 100,
-        cur: { label: "Sisa per bulan sekarang", value: rp(x.net) }, tgt: { label: "Target", value: "Rp0 atau lebih" },
-        gap: x.net < 0 ? `Tutup ${rp(-x.net)} per bulan` : "",
-        bar: { kind: "fill", cur: c.income, tgt: c.expense, curLabel: "Pendapatan", tgtLabel: "Pengeluaran + cicilan", fmt: rp },
-        criteria: [{ label: "Pendapatan ≥ pengeluaran + cicilan", met: x.net >= 0, value: `${rp(c.income)} vs ${rp(c.expense)}` }],
-        short: x.net < 0 ? `Kurang ${rpShort(-x.net)}/bln` : `Sisa ${rpShort(x.net)}/bln`,
+        id: "minus", number: 1, title: "Keluar dari minus", pillar: "Arus kas", tool: "cashflow",
+        caption: `Sisa uang 30 hari minimal ${pct(MILESTONE.STEP1_MIN_NET_RATIO)} dari pendapatan.`,
+        explain: `sisa 30 hari ÷ (${pct(MILESTONE.STEP1_MIN_NET_RATIO)} × pendapatan).`,
+        progress: t.rolling.income > 0 ? Math.round((t.rolling.net / (MILESTONE.STEP1_MIN_NET_RATIO * t.rolling.income)) * 100) : 0,
+        cur: { label: `Sisa 30 hari (${t.rolling.source})`, value: rp(t.rolling.net) },
+        tgt: { label: "Target", value: rp(Math.round(MILESTONE.STEP1_MIN_NET_RATIO * t.rolling.income)) },
+        gap: rules.minus.met ? "" : `Tambah ${rp(Math.round(MILESTONE.STEP1_MIN_NET_RATIO * t.rolling.income) - t.rolling.net)} per 30 hari`,
+        bar: { kind: "fill", cur: Math.max(0, t.rolling.net), tgt: Math.max(1, Math.round(MILESTONE.STEP1_MIN_NET_RATIO * t.rolling.income)), curLabel: "Sisa", tgtLabel: "Target", fmt: rp },
+        criteria: [{ label: `Sisa 30 hari ≥ ${pct(MILESTONE.STEP1_MIN_NET_RATIO)} pendapatan`, met: rules.minus.met, value: rp(t.rolling.net) }],
+        short: t.rolling.net < 0 ? `Kurang ${rpShort(-t.rolling.net)}` : `Sisa ${rpShort(t.rolling.net)}`,
+        sick: sickNow(),
       },
       {
-        id: "bantalan", title: "Bantalan pertama Rp1 juta", pillar: "Tabungan & ketahanan", tool: "savings",
-        caption: "Uang khusus untuk servis mendadak atau motor rusak, supaya Anda tidak perlu pinjol.", explain: "dana darurat ÷ Rp1.000.000.",
-        ...savingsStep(x, 1e6, "Rp1.000.000"),
-      },
-      {
-        id: "proteksi", title: "Proteksi dasar: BPJS", pillar: "Rencana & proteksi", tool: "protect",
-        caption: "Sakit atau kecelakaan di jalan tidak menghabiskan tabungan.", explain: "setiap BPJS aktif = 50%.",
-        progress: (prot.kes ? 50 : 0) + (prot.ket ? 50 : 0),
-        cur: { label: "Sekarang", value: [prot.kes && "BPJS Kesehatan", prot.ket && "BPJS TK"].filter(Boolean).join(" + ") || "Belum ada" },
-        tgt: { label: "Target", value: "BPJS Kesehatan + Ketenagakerjaan" },
-        gap: [!prot.kes && "Aktifkan BPJS Kesehatan", !prot.ket && "Daftar BPJS Ketenagakerjaan"].filter(Boolean).join(" · "),
-        bar: { kind: "fill", cur: (prot.kes ? 1 : 0) + (prot.ket ? 1 : 0), tgt: 2, curLabel: "Aktif", tgtLabel: "Target", fmt: (v) => `${Math.round(v)} dari 2` },
-        criteria: [{ label: "BPJS Kesehatan aktif", met: prot.kes }, { label: "BPJS Ketenagakerjaan aktif", met: prot.ket }, { label: "Asuransi lain (opsional)", met: !!S.profile.hasInsurance, optional: true }],
-        short: `${(prot.kes ? 1 : 0) + (prot.ket ? 1 : 0)} dari 2 BPJS aktif`,
-      },
-      {
-        id: "darurat", title: "Dana darurat 3 bulan", pillar: "Tabungan & ketahanan", tool: "savings",
-        caption: "Bantalan penuh saat sakit, kecelakaan, atau order sepi panjang.", explain: "dana darurat ÷ (3 × pengeluaran bulanan).",
-        ...savingsStep(x, 3 * c.expense, `${rp(3 * c.expense)} (3 bulan)`),
-      },
-      {
-        id: "rutin", title: "Menabung rutin 10% pendapatan", pillar: "Tabungan & ketahanan", tool: "monthly",
-        caption: "Anda menyisihkan tabungan di awal bulan, tidak menunggu sisa.", explain: "disisihkan per bulan ÷ 10% pendapatan.",
-        progress: t10 > 0 ? Math.round((x.monthlySave / t10) * 100) : 0,
-        cur: { label: "Disisihkan per bulan", value: rp(x.monthlySave) }, tgt: { label: "Target (10%)", value: `${rp(t10)} / bln` },
-        gap: x.monthlySave < t10 ? `Tambah ${rp(t10 - x.monthlySave)} per bulan` : "",
-        bar: { kind: "fill", cur: x.monthlySave, tgt: t10, curLabel: "Disisihkan", tgtLabel: "10% pendapatan", fmt: rp },
-        criteria: [{ label: "Menyisihkan ≥ 10% pendapatan", met: t10 > 0 && x.monthlySave >= t10, value: `${rp(x.monthlySave)} dari ${rp(t10)}` }],
-        short: `${rpShort(x.monthlySave)} dari ${rpShort(t10)}/bln`,
-      },
-      goalStep(x, g, goalAmt),
-      {
-        id: "kredit", title: "Siap ajukan kredit resmi", pillar: "Rencana & proteksi", tool: "credit",
-        caption: "Rekam jejak yang bisa dibawa ke bank untuk modal usaha.", explain: "rata-rata dari empat syarat di bawah.",
+        id: "bantalan", number: 2, title: `Bantalan ${rpShort(t.buffer)} + lunasi utang bunga tinggi`, pillar: "Tabungan & ketahanan", tool: "buffer",
+        caption: "Uang beku untuk biaya mendadak, dan utang berbunga tinggi dilunasi.",
+        explain: "uang beku ÷ target, dan tidak ada utang bunga tinggi tersisa.",
+        progress: Math.round(((Math.min(frozen, t.buffer) / t.buffer) * 0.6 + (high.length ? 0 : 0.4)) * 100),
+        cur: { label: "Uang beku", value: rp(frozen) }, tgt: { label: "Target", value: rp(t.buffer) },
+        gap: [frozen < t.buffer ? `Kurang ${rp(t.buffer - frozen)}` : "", high.length ? `${high.length} utang bunga tinggi` : ""].filter(Boolean).join(" · "),
+        bar: { kind: "fill", cur: frozen, tgt: t.buffer, curLabel: "Uang beku", tgtLabel: "Target", fmt: rp },
         criteria: [
-          { label: "Skor kesehatan ≥ 70", met: h.total >= 70, value: `skor ${h.total}`, part: Math.min(1, h.total / 70), act: `Naikkan skor ${70 - h.total} poin` },
-          { label: "Status data untuk bank: Tier 1 atau 2", met: trust.tier === 1 || trust.tier === 2, value: `Tier ${trust.tier}`, part: { 1: 1, 2: 1, 3: 0.3, 0: 0 }[trust.tier], act: "Hubungkan e-wallet" },
-          { label: "Tidak ada utang bunga tinggi", met: !x.highDebts.length, value: x.highDebts.length ? `${x.highDebts.length} tersisa` : "", part: x.lane.checkpoints[0].base ? 1 - x.highTotal / x.lane.checkpoints[0].base : 1, act: "Lunasi utang bunga tinggi" },
-          { label: "Cicilan ≤ 30% pendapatan", met: h.dsr <= 0.3, value: pct(h.dsr), part: h.dsr <= 0.3 ? 1 : Math.max(0, 1 - (h.dsr - 0.3) / 0.3), act: "Turunkan cicilan ke ≤30% pendapatan" },
+          { label: `Uang beku ≥ ${rp(t.buffer)}`, met: frozen >= t.buffer, value: rp(frozen) },
+          { label: "Tidak ada utang bunga tinggi", met: high.length === 0, value: high.length ? `${high.length} tersisa` : "" },
         ],
-        cur: { label: "Sekarang", value: `Skor ${h.total} · Tier ${trust.tier}` }, tgt: { label: "Target", value: "Skor 70 · Tier 1 atau 2" },
-        bar: { kind: "fill", cur: h.total, tgt: 70, curLabel: "Skor", tgtLabel: "Skor minimal", fmt: (v) => String(Math.round(v)) },
-        short: `Skor ${h.total}/70 · Tier ${trust.tier}`,
+        checkpoints: MILESTONE.STEP2_CHECKPOINTS.map(v => ({ v, met: frozen >= v, label: rpShort(v) })),
+        short: `${rpShort(frozen)} dari ${rpShort(t.buffer)}`, pot: "emergency", target: t.buffer,
+      },
+      {
+        id: "darurat", number: 3, title: "Dana darurat + mulai tujuan wajib", pillar: "Tabungan & ketahanan", tool: "buffer",
+        caption: `${ddMonths(Number(S.profile.dependents) || 0)} bulan pengeluaran, mengikuti jumlah tanggungan.`,
+        explain: "uang beku ÷ (bulan target × pengeluaran bulanan terkunci).",
+        progress: t.dd > 0 ? Math.round((frozen / t.dd) * 100) : 0,
+        cur: { label: "Uang beku", value: rp(frozen) },
+        tgt: { label: `Target (${ddMonths(Number(S.profile.dependents) || 0)} bulan)`, value: rp(t.dd) },
+        gap: frozen < t.dd ? `Kurang ${rp(t.dd - frozen)}` : "",
+        bar: { kind: "fill", cur: frozen, tgt: Math.max(t.dd, 1), curLabel: "Uang beku", tgtLabel: "Target", fmt: rp },
+        criteria: [{ label: `Uang beku ≥ ${rp(t.dd)}`, met: frozen >= t.dd, value: rp(frozen) }],
+        goals: wajib, goalSaved: pot(wajib), goalTarget: potTarget(wajib),
+        short: `${rpShort(frozen)} dari ${rpShort(t.dd)}`, pot: "emergency", target: t.dd,
+      },
+      {
+        id: "investasi", number: 4, title: `Investasi ${pct(MILESTONE.STEP4_INVEST_RATIO)} selama ${MILESTONE.STEP4_STREAK_MONTHS} bulan`, pillar: "Rencana & proteksi", tool: "growth",
+        caption: "Uang tumbuh disetor rutin, bukan diambil untuk belanja.",
+        explain: `bulan beruntun ÷ ${MILESTONE.STEP4_STREAK_MONTHS}.`,
+        progress: Math.round((Math.min(inv.streak, MILESTONE.STEP4_STREAK_MONTHS) / MILESTONE.STEP4_STREAK_MONTHS) * 100),
+        cur: { label: "Beruntun", value: `${inv.streak} bulan` },
+        tgt: { label: "Target", value: `${MILESTONE.STEP4_STREAK_MONTHS} bulan · ${rp(t.invest)}/bln` },
+        gap: inv.done ? "" : `Setor ${rp(t.invest)} per bulan, ${MILESTONE.STEP4_STREAK_MONTHS - inv.streak} bulan lagi`,
+        bar: { kind: "fill", cur: inv.streak, tgt: MILESTONE.STEP4_STREAK_MONTHS, curLabel: "Beruntun", tgtLabel: "Target", fmt: (v) => `${Math.round(v)} bln` },
+        criteria: [{ label: `Setoran ≥ ${rp(t.invest)} selama ${MILESTONE.STEP4_STREAK_MONTHS} bulan beruntun`, met: inv.done, value: `${inv.streak} bulan` }],
+        warn: t.rolling.net < t.invest ? `Sisa uang Anda ${rp(t.rolling.net)} per bulan, masih di bawah ${rp(t.invest)}. Naikkan sisa uang dulu sebelum step ini.` : "",
+        thisMonth: inv.thisMonth, target: t.invest, pot: "growth",
+        short: `${inv.streak} dari ${MILESTONE.STEP4_STREAK_MONTHS} bulan`,
+      },
+      {
+        id: "tumbuh", number: 5, title: "Tujuan tumbuh", pillar: "Rencana & proteksi", tool: "goals",
+        caption: "Tujuan jangka panjang yang dikejar setelah fondasi aman.",
+        explain: "tabungan tujuan ÷ nominal tujuan.",
+        progress: potTarget(tumbuh) > 0 ? Math.round((pot(tumbuh) / potTarget(tumbuh)) * 100) : 0,
+        cur: { label: "Terkumpul", value: rp(pot(tumbuh)) },
+        tgt: { label: "Target", value: potTarget(tumbuh) ? rp(potTarget(tumbuh)) : "Belum ditentukan" },
+        gap: !tumbuh.length ? "Pilih tujuan tumbuh di Profil" : pot(tumbuh) < potTarget(tumbuh) ? `Kurang ${rp(potTarget(tumbuh) - pot(tumbuh))}` : "",
+        bar: { kind: "fill", cur: pot(tumbuh), tgt: Math.max(potTarget(tumbuh), 1), curLabel: "Terkumpul", tgtLabel: "Target", fmt: rp },
+        criteria: tumbuh.length
+          ? tumbuh.map(id => ({ label: goalLabel(id), met: goalDone(id), value: goalAmountOf(id) ? `${rpShort(goalSavedOf(id))} dari ${rpShort(goalAmountOf(id))}` : "nominal belum diisi" }))
+          : [{ label: "Pilih minimal satu tujuan tumbuh", met: false }],
+        goals: tumbuh, pot: "goal",
+        short: tumbuh.length ? `${rpShort(pot(tumbuh))} dari ${rpShort(potTarget(tumbuh))}` : "Belum ada tujuan",
       },
     ];
-    const kredit = steps[steps.length - 1];
-    kredit.progress = Math.round((kredit.criteria.reduce((s, k) => s + clamp(k.part, 0, 1), 0) / kredit.criteria.length) * 100);
-    kredit.gap = kredit.criteria.filter(k => !k.met).map(k => k.act).slice(0, 2).join(" · ");
-    return steps;
   }
 
-  function goalStep(x, g, goalAmt) {
-    const base = { id: "tujuan", title: g.title, caption: g.caption, pillar: "Rencana & proteksi", goalKind: g.kind };
-    if (g.kind === "debtall") {
-      const L = x.lane;
-      return { ...base, tool: "debtgoal", explain: "utang yang sudah dibayar ÷ jumlah tertinggi yang pernah tercatat.",
-        progress: L.base > 0 ? L.progress : 100,
-        cur: { label: "Sisa semua utang", value: rp(x.totalDebt) }, tgt: { label: "Target", value: "Rp0 (lunas)" },
-        gap: x.totalDebt > 0 ? `Lunasi ${rp(x.totalDebt)}` : "",
-        bar: { kind: "paid", paid: L.paid, left: x.totalDebt, fmt: rp },
-        criteria: [{ label: "Semua utang konsumtif lunas", met: x.totalDebt === 0, value: x.openDebts.length ? `${x.openDebts.length} tersisa` : "" }],
-        short: x.totalDebt ? `Sisa ${rpShort(x.totalDebt)}` : "Lunas" };
-    }
-    if (g.kind === "emergency6") return { ...base, tool: "savings", explain: "dana darurat ÷ (6 × pengeluaran bulanan).", ...savingsStep(x, 6 * x.c.expense, `${rp(6 * x.c.expense)} (6 bulan)`) };
-    // tabungan tujuan (pot terpisah dari dana darurat)
-    const s = x.goalSaved, months = Number(S.resilience.horizon) || 12;
-    const start = S.finishedAt ? new Date(S.finishedAt) : new Date();
-    const deadline = new Date(start); deadline.setMonth(deadline.getMonth() + months);
-    const monthsLeft = Math.max(1, Math.round((deadline - Date.now()) / (30 * 864e5)));
-    const needPerMonth = goalAmt > s ? Math.ceil((goalAmt - s) / monthsLeft / 1000) * 1000 : 0;
-    return { ...base, tool: "goal", explain: "tabungan tujuan ÷ target tujuan.", target: goalAmt, pot: "goal", deadline, needPerMonth,
-      progress: goalAmt > 0 ? Math.round((s / goalAmt) * 100) : 0,
-      cur: { label: "Tabungan tujuan", value: rp(s) }, tgt: { label: "Target", value: goalAmt ? `${rp(goalAmt)} · ${deadline.toLocaleDateString("id-ID", { month: "short", year: "numeric" })}` : "Belum ditentukan" },
-      gap: !goalAmt ? "Tentukan nominal tujuan dulu" : s < goalAmt ? `Kurang ${rp(goalAmt - s)} · ±${rp(needPerMonth)}/bln` : "",
-      bar: { kind: "fill", cur: s, tgt: Math.max(goalAmt, 1), curLabel: "Terkumpul", tgtLabel: "Target", fmt: rp },
-      criteria: [{ label: goalAmt ? `Tabungan tujuan ≥ ${rp(goalAmt)}` : "Nominal tujuan ditentukan", met: goalAmt > 0 && s >= goalAmt, value: rp(s) }],
-      short: goalAmt ? `${rpShort(s)} dari ${rpShort(goalAmt)}` : "Nominal belum diisi" };
-  }
-
-  // Semua tangga + status. Rapor selalu di ujung tangga.
+  // Semua step + status. Rapor selalu di ujung.
   function buildMilestones() {
     const x = ladderContext();
-    const today = isoOf(new Date());
-    let activeFound = false;
-    const steps = stepDefs(x).map((m, i) => {
+    const st = evaluateStatus(x);
+    const defs = stepDefs(x);
+    const steps = defs.map((m, i) => {
+      const status = st[m.id]?.status || "terkunci";
+      const done = status === "selesai" || status === "isi_ulang";
       const allMet = m.criteria.filter(k => !k.optional).every(k => k.met);
-      m.progress = allMet ? 100 : Math.min(99, Math.max(0, Math.round(m.progress)));   // 100% hanya bila semua syarat terpenuhi
-      const done = m.progress >= 100;
-      const status = done ? "done" : !activeFound ? (activeFound = true, "active") : "next";
-      if (done && !S.milestones.doneAt[m.id]) S.milestones.doneAt[m.id] = today;
+      m.progress = done && allMet ? 100 : Math.min(99, Math.max(0, Math.round(m.progress || 0)));
+      if (done && !S.milestones.doneAt[m.id]) S.milestones.doneAt[m.id] = isoOf(new Date());
       if (!done && S.milestones.doneAt[m.id]) delete S.milestones.doneAt[m.id];
-      return { ...m, x, index: i, number: i + 1, status };
+      return { ...m, x, index: i, status, state: status, meta: STATUS_META[status], since: st[m.id]?.since || "" };
     });
-    const doneN = steps.filter(s => s.status === "done").length;
+    const doneN = steps.filter(s => s.status === "selesai").length;
     steps.push({
-      id: "rapor", title: "Rapor & kesimpulan", pillar: "Ringkasan", tool: "rapor", x, index: steps.length, number: steps.length + 1,
+      id: "rapor", title: "Rapor & kesimpulan", pillar: "Ringkasan", tool: "rapor", x, index: steps.length, number: steps.length,
       caption: "Ringkasan perjalanan dan kondisi keuangan Anda.", progress: Math.round((doneN / steps.length) * 100),
-      status: doneN === steps.length ? "done" : "next", final: doneN === steps.length, short: doneN === steps.length ? "Rapor akhir siap" : "Rapor sementara",
+      status: doneN === steps.length ? "selesai" : "aktif", state: doneN === steps.length ? "selesai" : "aktif",
+      meta: STATUS_META[doneN === steps.length ? "selesai" : "aktif"],
+      final: doneN === steps.length, short: doneN === steps.length ? "Rapor akhir siap" : "Rapor sementara",
       gap: "", criteria: [],
     });
     return steps;
@@ -1338,9 +1652,8 @@ income: { perPlatform: { gojek: 160000, grab: 110000 }, bonus: 400000, tips: 150
     const x = ladderContext();
     return {
       d: isoOf(new Date()), score: x.h.total, income: Math.round(x.c.income), expense: Math.round(x.c.expense), net: Math.round(x.net),
-      emergency: x.emergency, emergencyMonths: Math.round(x.h.months * 10) / 10, goalSaved: x.goalSaved, monthlySave: x.monthlySave,
+      emergency: x.emergency, emergencyMonths: Math.round(x.h.months * 10) / 10, goalSaved: x.goalSaved, growth: x.growth, monthlySave: x.monthlySave,
       totalDebt: x.totalDebt, highDebt: x.highTotal, dsr: Math.round(x.h.dsr * 100) / 100,
-      bpjs: (S.profile.hasBpjsKes ? 1 : 0) + (S.profile.hasBpjsKet ? 1 : 0),
     };
   }
 
@@ -1366,7 +1679,7 @@ income: { perPlatform: { gojek: 160000, grab: 110000 }, bonus: 400000, tips: 150
         vehicle: p.vehicle, vehicleOwnership: OWNERSHIP.find(o => o.id === p.ownership)?.label || "",
         hoursPerDay: p.hoursPerDay, daysPerWeek: p.daysPerWeek,
         householdStatus: statusLabel(p.status), dependents: p.dependents, sideIncome: p.sideJobs,
-        hasBankAccount: p.hasBank, protection: { bpjsKesehatan: p.hasBpjsKes, bpjsKetenagakerjaan: p.hasBpjsKet, otherInsurance: p.hasInsurance },
+        hasBankAccount: hasBankEvidence(), protection: { otherInsurance: p.hasInsurance },
         recordsIncome: RECORDS_LABEL[p.recordsIncome] || "",
       },
       // Isian manual = gambaran lengkap; e-wallet = verifikasi. Setiap baris diberi status verifikasinya.
@@ -1400,7 +1713,11 @@ income: { perPlatform: { gojek: 160000, grab: 110000 }, bonus: 400000, tips: 150
         monthlySave: x.monthlySave, habit: HABITS.find(hb => hb.id === r.habit)?.label || "", places: r.places,
         shockTest1M: SHOCK_LABEL[r.shock] || "",
       },
-      goals: { primary: goalOf(r.primaryGoal), all: r.goals.map(goalOf), targetAmount: Number(r.goalAmount) || 0, horizonMonths: r.horizon, wantsFormalCredit: r.wantsBankLoan },
+      goals: {
+        wajib: goalsOf("wajib").map(id => ({ id, label: goalLabel(id), amount: goalAmountOf(id), saved: goalSavedOf(id), deadline: goalInfo(id).deadline || null })),
+        tumbuh: goalsOf("tumbuh").map(id => ({ id, label: goalLabel(id), amount: goalAmountOf(id), saved: goalSavedOf(id), deadline: goalInfo(id).deadline || null })),
+        horizonMonths: r.horizon, wantsFormalCredit: r.wantsBankLoan,
+      },
       health: {
         score: h.total, category: h.grade.label, surplusRatio: Math.round(h.surplusRatio * 100) / 100, debtServiceRatio: Math.round(h.dsr * 100) / 100,
         debtToAnnualIncome: Math.round(h.dti * 100) / 100,

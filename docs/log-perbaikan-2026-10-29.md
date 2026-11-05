@@ -164,3 +164,112 @@ Diuji di layar 375x812: data lama, mengetik dua angka (perkiraan terendah dan te
 | Halaman Rincian skor | Sama: selalu terbuka dan bisa diketuk. Langkah Hasil di onboarding tidak berubah |
 
 Diuji di layar 375x812, ID dan EN, data contoh Andi: 12 komponen yang belum penuh punya tujuan yang benar, Dana darurat membuka dialog Setor dana darurat, Tabungan membuka tiga kartu yang benar. Uji hitungan dan skor contoh tetap (25, 50, 93).
+
+## L. Revisi 5 Nov: dua jalur data, isi otomatis, penjaga coverage
+
+| Bagian | Perubahan |
+|---|---|
+| Izin data | Jadi dua jalur yang saling meniadakan: Hubungkan e-wallet (disarankan) atau Isi manual. Tidak ada lagi kondisi memakai keduanya |
+| Isi otomatis | Begitu sampai langkah Pendapatan, kolom diisi sekali dari transaksi terbukti: pendapatan per aplikasi, pemasukan lain, rata-rata harian, hari ramai, hari sepi, dan tiap kategori pengeluaran. Setelah itu angka milik pengguna dan bebas diedit. `autofillFromVerified()` di `core.js`, penanda `S.autofill` |
+| Penjaga coverage | Kartu "Pendapatan yang terbukti" dan "Pengeluaran yang terbukti" di langkah Pendapatan dan Pengeluaran. Memakai `shareIn` dan `shareOut` yang sudah ada tapi belum pernah ditampilkan. Di atas 80% Cocok, 50 sampai 80% Sebagian, di bawah 50% Jauh di atas. Angkanya berubah seketika saat pengguna mengetik |
+| Kamus EN | 24 entri baru. Dua kunci ganda lama dibersihkan |
+
+Diuji di layar 375x812, ID dan EN: GoPay lewat simulator mengisi 1 aplikasi, 10 kategori, dan angka harian dari 92 transaksi. Isian dinaikkan 10 kali turun ke 11% berlabel Jauh di atas, dinaikkan sedikit 70% Sebagian, dikembalikan 100% Cocok. Tidak ada teks Indonesia tersisa di mode EN dan tidak ada error di konsol. Uji hitungan dan skor contoh tetap (25, 50, 93).
+
+Belum dikerjakan: langkah Upload PDF untuk jalur manual.
+
+## M. Revisi 5 Nov: langkah Dokumen untuk jalur manual
+
+| Bagian | Perubahan |
+|---|---|
+| Langkah 4 | Ada di kedua jalur. Jalur e-wallet menampilkan "E-wallet", jalur manual menampilkan "Dokumen". Label pil ikut berganti lewat `stepLabel()` |
+| Unggah e statement | Pilih PDF mutasi, atau "Pakai contoh" saat mode simulasi. Hasilnya tampil sebagai kartu: uang masuk, pengeluaran, jumlah transaksi, periode, saldo akhir. Bisa unggah bulan berikutnya (baris kembar tidak dihitung dua kali) dan bisa dihapus |
+| Boleh dilewati | Tombol Lanjut tidak pernah tertahan di langkah Dokumen |
+| Pembaca PDF | `openfinance/statement.py` diambil dari branch grace, hanya file itu. Server, tampilan, dan sisanya ditulis sendiri |
+| Server | `POST /api/statements/upload`, `POST /api/statements/sample`, `DELETE /api/statements?name=`. E statement disajikan seperti dompet (`source: "statement"`) supaya hitungan di browser tidak perlu jalur khusus. Periode diambil dari isi dokumen, bukan tanggal hari ini |
+| Bukti yang sah | `isEvidence()` di `core.js`: e-wallet terhubung hanya dihitung kalau jalur e-wallet yang dipilih, e statement selalu dihitung. Jadi pengisian otomatis dan coverage juga jalan di jalur manual |
+| Tombol dibuang | "Lanjut tanpa e-wallet" di langkah E-wallet dihapus, karena jalur sudah dipilih di Izin data. Dialog "Mau hubungkan e-wallet?" ikut dihapus |
+| Isi ulang | Tombol "Isi ulang dari transaksi" di kartu coverage, untuk dipakai setelah mengunggah dokumen bulan berikutnya |
+
+Diuji di layar 375x812, ID dan EN: jalur manual dengan PDF contoh BCA terbaca 38 transaksi, periode dan saldo akhir benar, kolom Pendapatan dan Pengeluaran terisi sendiri. Isian dinaikkan 10 kali turun ke 9%. Jalur e-wallet tanpa dompet tertahan dengan pesan yang benar, dan dokumen saja tidak meloloskannya. Tidak ada teks Indonesia tersisa di mode EN dan tidak ada error di konsol. Uji hitungan dan skor contoh tetap (25, 50, 93).
+
+Catatan untuk penggabungan: huruf bagian L dan M di sini bentrok dengan L, M, N di branch grace. Perlu dinomori ulang saat digabung.
+
+## N. Revisi 5 Nov: mode contoh supaya tautan jalan tanpa server
+
+Masalahnya: tautan GitHub Pages hanya menyajikan berkas, tidak bisa menjalankan Python, jadi setiap
+`/api/...` gagal dan teman yang membuka tautan diminta menjalankan `python server.py`.
+
+| Bagian | Perubahan |
+|---|---|
+| Data contoh | `tools/buat-data-contoh.py` membuat `public/demo-data.json` (44 KB): ringkasan 6 dompet plus satu e statement, dihitung oleh `MockProvider` dan `summarize` yang sama dengan mode server |
+| Mesin mode contoh | `public/demo-mode.js` melayani config, daftar dompet, link, sync, putus, dan e statement contoh dari berkas itu plus localStorage |
+| Jalur mundur di `api()` | Kalau jawaban bukan dari API Laju (mis. halaman 404 hosting statis), permintaan dialihkan ke mode contoh. Error API sungguhan tetap diteruskan apa adanya. Setelah sekali terbukti tanpa server, panggilan berikutnya langsung ke mode contoh |
+| Halaman penyedia | `simulasi-penyedia.html?demo=1` kembali langsung ke onboarding tanpa singgah ke callback server. Pemeriksaan open redirect tetap berlaku di mode server |
+| Tanda di layar | Spanduk "Mode contoh" di langkah E-wallet. Di langkah Dokumen, pemilih berkas disembunyikan dan diganti penjelasan plus tombol Pakai contoh |
+| Perbaikan kecil | `e.submitter` di halaman penyedia bisa kosong saat form dikirim lewat skrip, sekarang dijaga |
+
+Diuji dengan `python -m http.server` (hanya berkas, tanpa API, persis seperti GitHub Pages), layar 375x812:
+GoPay terhubung lewat halaman penyedia sampai tuntas, 104 transaksi, kolom Pendapatan dan Pengeluaran
+terisi sendiri, coverage 100%. Jalur dokumen: tombol Pakai contoh menghasilkan JOJO 39 transaksi.
+Halaman aplikasi dan tombol Data contoh juga jalan. Indikator header tetap LIVE karena halamannya memang tersaji.
+Uji hitungan dan skor contoh tetap (25, 50, 93).
+
+## O. Revisi 5 Nov: PDF contoh dan perbandingan angka
+
+| Bagian | Perubahan |
+|---|---|
+| PDF contoh | `tools/buat-data-contoh.py` juga membuat `public/contoh-estatement-jojo.pdf` (1 KB, 39 transaksi). Di langkah Dokumen ada tautan "Unduh PDF contoh", jadi alur unggah bisa dicoba sungguhan tanpa punya mutasi sendiri. Tautan ini disembunyikan di mode contoh karena di sana PDF asli memang belum bisa dibaca |
+| Kartu perbandingan | Kartu "Pendapatan yang terbukti" dan "Pengeluaran yang terbukti" kini menampilkan tiga baris angka: tercatat di e-wallet atau dokumen, menurut isian pengguna, dan selisihnya. Label sumbernya mengikuti bukti yang ada (`evidenceLabel()`). Selisih yang belum terlihat di transaksi diberi warna |
+| Kamus EN | 10 entri baru |
+
+Diuji di layar 375x812, ID dan EN, dengan server berjalan: `contoh-estatement-jojo.pdf` diunduh lalu diunggah lewat endpoint yang sama dengan tombol pilih berkas, terbaca 39 transaksi. Kartu Pendapatan menampilkan Rp1.060.000 dari dokumen vs Rp1.065.000 isian, selisih Rp5.000, 100% terbukti. Isian dinaikkan jadi Rp7.794.000 membuat selisih Rp6.734.000 dan turun ke 14% berlabel Jauh di atas. Kartu Pengeluaran berperilaku sama. Tidak ada teks Indonesia tersisa di mode EN dan tidak ada error di konsol. Uji hitungan dan skor contoh tetap (25, 50, 93).
+
+## P. Revisi 5 Nov: landasan milestone v1
+
+Mengganti tangga 8 langkah dengan Step 0 sampai 5, sesuai spesifikasi tim. `openfinance/` dan `server.py` tidak disentuh.
+
+| Bagian | Perubahan |
+|---|---|
+| Step | Enam step: Data rapi, Keluar dari minus, Bantalan Rp3 jt + lunasi utang bunga tinggi, Dana darurat + tujuan wajib, Investasi 10% tiga bulan, Tujuan tumbuh. Konstanta ambang ada di `MILESTONE` |
+| Mesin status | Enam status: `terkunci`, `aktif`, `selesai`, `isi_ulang`, `dijeda`, `dibuka_lagi`. Masa bertahan 28 hari untuk Step 2 dan 3, jendela kemunduran 30 hari. Riwayat perubahan status disimpan di `S.milestones.stLog` |
+| Utang bunga tinggi | Jadi syarat selesai Step 2, bukan jalur terpisah. `effectiveAPR()` menghitung bunga efektif dari pokok, cicilan, dan tenor lewat bisection. Pinjol, paylater, rentenir, kartu kredit otomatis tinggi. Keluarga dan teman tidak pernah tinggi tapi wajib punya jadwal bayar. Data kurang dianggap tinggi |
+| Uang | `savings` jadi uang beku (bantalan + dana darurat, satu saldo). Tambahan `growth` untuk uang tumbuh dan `goalData` untuk tabungan tiap tujuan |
+| Tujuan | Dua kelompok: wajib (mulai Step 3, porsi maksimal 30% sisa uang) dan tumbuh (mulai Step 5). "Lunasi utang" dan "Punya dana darurat" dilepas dari daftar karena kini jadi Step 2 dan Step 3 |
+| Pembagian sisa uang | Mengikuti step yang sedang dikerjakan: 70/30 ke utang dan bantalan selama ada utang bunga tinggi, 50% ke uang beku saat isi ulang, 10% pendapatan ke uang tumbuh di Step 4 |
+| BPJS | Dihapus dari onboarding, milestone, dan skor. 11 poinnya dibagi ke komponen lain di pilar yang sama: Asuransi 2 jadi 5, Rekening bank 4 jadi 7, Tujuan 4 jadi 7, Simpanan aman 4 jadi 6. Pilar tetap 25 poin |
+| Catat | Pengambilan uang beku wajib memilih alasan dari tujuh pilihan. Tambahan setor dan ambil uang tumbuh, setor per tujuan, dan tombol Mode Sakit |
+| Onboarding | Kartu BPJS dihapus, jumlah tanggungan wajib diisi, utang dapat kolom cicilan dan jadwal bayar, tujuan dapat nominal dan tenggat sendiri, peringatan kalau tenggat tujuan wajib jatuh sebelum perkiraan sampai Step 3 |
+| Dokumen | `metodologi.md` bagian 3 dan 4 ditulis ulang, tabel skor disesuaikan. `ai-data-contract.md` memuat status enam step dan kelompok tujuan |
+| Kamus EN | 80 entri dan 3 aturan baru |
+
+Diuji: keempat profil di bagian 10 cocok persis lewat simulasi bulanan (Budi 12 dan 5 bulan, Andi 7 dan 7, Sari 3 dan 13, Sari dengan tujuan wajib 30% jadi 19). Lima uji perilaku juga lolos: bantalan dipakai untuk motor rusak tetap selesai dan ditandai isi ulang, pinjol baru membuat Step 2 dibuka lagi dengan Step 3 sampai 5 dijeda dan saldo utuh, Mode Sakit menahan kemunduran Step 1, setoran 8% di bulan kedua memutus hitungan beruntun, dan bunga contoh 1 juta dengan cicilan 600 ribu tenor 2 bulan terbaca 13% per bulan. Diuji juga di layar 375x812 dalam bahasa Indonesia dan Inggris, tanpa teks Indonesia tersisa di mode EN dan tanpa error di konsol.
+
+Skor contoh berubah jadi 25 ke 22, 50 ke 52, dan 93 ke 90, karena 11 poin BPJS dibagi ulang.
+
+Belum dikerjakan: pemindahan dana saat ganti tujuan (`GOAL_SWITCH_MIN_DAYS` sudah ada sebagai konstanta tapi belum dipakai), dan proyeksi tenggat tujuan tumbuh masih berupa peringatan sederhana, belum tawaran tiga pilihan.
+
+## Q. Revisi 5 Nov: langkah E-wallet jadi ketat
+
+| Bagian | Perubahan |
+|---|---|
+| Syarat lanjut | Semua e-wallet yang dipilih pengguna di Profil wajib terhubung, bukan lagi minimal satu. Tombol Lanjut tertahan selama masih ada yang belum, dan petunjuk di bawah menyebut namanya |
+| Judul langkah | "Hubungkan semua e-wallet Anda". Penjelasannya menyebut mana yang belum terhubung, atau memastikan semuanya sudah |
+| Tunai | Dihapus dari langkah ini. Tunai bukan e-wallet, jadi tidak lagi tampil di kartu "Tidak bisa dihubungkan". Dompet buatan sendiri seperti JOJO tetap ada di sana karena memang jalur uang yang tidak bisa dihubungkan |
+| Teks | Pesan "Bisa lanjut, N e-wallet belum terhubung" dihapus karena sekarang tidak boleh lanjut |
+
+Diuji di layar 375x812, ID dan EN, dengan pilihan GoPay, OVO, tunai, dan JOJO di Profil: tanpa dompet terhubung Lanjut tertahan dan menyebut GoPay dan OVO, setelah GoPay saja tetap tertahan dan menyebut OVO, setelah keduanya terhubung baru bisa lanjut. Tunai tidak muncul di langkah ini, JOJO tetap muncul. Uji hitungan dan uji penerimaan milestone tetap lolos.
+
+## R. Revisi 5 Nov: rekening bank lewat bukti, bukan centang
+
+| Bagian | Perubahan |
+|---|---|
+| Profil | Saklar "Punya rekening bank aktif" dihapus. Pilihan "Tunai" dan "Rekening bank" dihapus dari daftar jalur uang. Tersisa lima e-wallet yang bisa dihubungkan plus dompet buatan sendiri |
+| Skor | Komponen "Rekening bank" (7 poin) tidak lagi dari centang sendiri, melainkan dari bukti: rekening bank terhubung atau e statement sudah diunggah (`hasBankEvidence()`). Nilainya jadi "Terbukti" atau "Belum ada bukti" |
+| Langkah E-wallet | Tiap dompet yang tidak terintegrasi (mis. JOJO, SeaBank) kini punya kartunya sendiri dengan unggah e statement PDF, Pakai contoh saat simulasi, Unggah bulan berikutnya, dan hapus. Kartu yang sudah terbaca menampilkan pencairan, pengeluaran, saldo akhir, dan garis riwayat x dari 6 bulan |
+| Kotak statistik | Dokumen tidak lagi dihitung sebagai e-wallet terhubung. Sekarang tertulis "0 / 1 terhubung · + 2 e statement" |
+| Migrasi | "tunai" dan "bank" dibuang dari `profile.channels`, `hasBank` dihapus. Label lama tetap terbaca lewat `LEGACY_CHANNEL` |
+
+Dari branch grace hanya diambil pembaca PDF `openfinance/statement.py` (sudah diambil sebelumnya). Tampilan kartu dan pengirimannya ditulis sendiri memakai endpoint yang sudah ada.
+
+Diuji di layar 375x812, ID dan EN: Profil tidak lagi punya saklar rekening bank maupun pilihan Tunai dan Rekening bank. JOJO lewat Pakai contoh terbaca 36 transaksi, SeaBank lewat unggah PDF sungguhan terbaca 39 transaksi, dan setelahnya komponen skor Rekening bank berubah jadi Terbukti. Uji invarian dan kesepuluh uji penerimaan milestone tetap lolos.

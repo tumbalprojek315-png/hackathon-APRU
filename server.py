@@ -10,18 +10,20 @@ demo; versi produksi butuh database dengan token terenkripsi.
 """
 from __future__ import annotations
 
+import base64
 import json
 import os
 import re
 import secrets
 import threading
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from http import cookies
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlencode, urlparse
 
 from openfinance import CATEGORY_LABELS, PLATFORM_LABELS, ProviderError, get_provider, history, summarize
+from openfinance import statement as stmt
 
 ROOT = Path(__file__).resolve().parent
 PUBLIC = ROOT / "public"
@@ -53,6 +55,35 @@ def public_view(rec: dict) -> dict:
         "summary": rec.get("summary"),
         "recent": rec.get("recent", []),
     }
+
+
+def statement_view(name: str, rec: dict) -> dict:
+    """E statement ditampilkan seperti dompet, supaya hitungan di browser tidak perlu jalur khusus.
+    Bedanya `source`: ini bukti dokumen, bukan data langsung dari penyedia."""
+    return {
+        "walletId": "c:" + name,
+        "source": "statement",
+        "accountName": name,
+        "accountRef": f"E statement · {rec.get('filename', 'PDF')}",
+        "linkedAt": rec["uploaded_at"],
+        "syncedAt": rec["uploaded_at"],
+        "summary": rec.get("summary"),
+        "recent": rec.get("recent", []),
+        "period": {"from": rec.get("from"), "to": rec.get("to")},
+        "balance": rec.get("balance"),
+    }
+
+
+def recalc_statement(rec: dict) -> None:
+    """Hitung ulang ringkasan dari transaksi yang tersimpan. Periode diambil dari isi dokumen,
+    bukan dari tanggal hari ini, supaya mutasi bulan lalu tetap terbaca utuh."""
+    raw = rec["transactions"]
+    days = sorted(t.date[:10] for t in raw)
+    first, last = date.fromisoformat(days[0]), date.fromisoformat(days[-1])
+    span = max(1, (last - first).days + 1)
+    summary, items = summarize(raw, span, today=last)
+    summary["history"] = history(raw, today=last)
+    rec.update(summary=summary, recent=items[:RECENT_LIMIT], **{"from": days[0], "to": days[-1]})
 
 
 class Handler(SimpleHTTPRequestHandler):
@@ -107,9 +138,9 @@ class Handler(SimpleHTTPRequestHandler):
     def _error(self, status: int, code: str, message: str, uid=None):
         self._send(status, {"error": {"code": code, "message": message}}, uid=uid)
 
-    def _json_body(self) -> dict:
+    def _json_body(self, limit: int = 10_000) -> dict:
         n = int(self.headers.get("Content-Length") or 0)
-        if n > 10_000:
+        if n > limit:
             raise ValueError("body too large")
         return json.loads(self.rfile.read(n) or b"{}") if n else {}
 
@@ -154,8 +185,11 @@ class Handler(SimpleHTTPRequestHandler):
             }, uid=uid)
         if url.path == "/api/wallets":
             with _lock:
-                recs = list(_users.get(uid[0], {}).get("wallets", {}).values())
-            return self._send(200, {"wallets": [public_view(r) for r in recs]}, uid=uid)
+                u = _users.get(uid[0], {})
+                recs = list(u.get("wallets", {}).values())
+                stmts = [(n, r) for n, r in u.get("statements", {}).items() if r.get("summary")]
+            return self._send(200, {"wallets": [public_view(r) for r in recs]
+                                    + [statement_view(n, r) for n, r in stmts]}, uid=uid)
         if url.path == "/api/wallets/callback":
             return self._callback(parse_qs(url.query), uid)
         return self._error(404, "not_found", "Alamat API tidak dikenal.", uid)
@@ -166,9 +200,12 @@ class Handler(SimpleHTTPRequestHandler):
         if not self._guard():
             return self._error(403, "forbidden", "Permintaan ditolak.", uid)
         try:
-            body = self._json_body()
+            body = self._json_body(6_000_000 if url.path.startswith("/api/statements/") else 10_000)
         except (ValueError, json.JSONDecodeError):
             return self._error(400, "bad_request", "Format permintaan tidak valid.", uid)
+
+        if url.path in ("/api/statements/upload", "/api/statements/sample"):
+            return self._statement(url.path.endswith("/sample"), body, uid)
 
         if url.path == "/api/wallets/link":
             wallet_id = str(body.get("walletId", ""))
@@ -194,6 +231,11 @@ class Handler(SimpleHTTPRequestHandler):
         uid = self._uid()
         if not self._guard():
             return self._error(403, "forbidden", "Permintaan ditolak.", uid)
+        if url.path == "/api/statements":
+            name = (parse_qs(url.query).get("name") or [""])[0]
+            with _lock:
+                _users.get(uid[0], {}).get("statements", {}).pop(name, None)
+            return self._send(200, {"ok": True}, uid=uid)
         m = re.fullmatch(r"/api/wallets/([a-z]+)", url.path)
         if not m:
             return self._error(404, "not_found", "Alamat API tidak dikenal.", uid)
@@ -246,6 +288,35 @@ class Handler(SimpleHTTPRequestHandler):
         with _lock:
             rec.update(summary=summary, recent=items[:RECENT_LIMIT], synced_at=now_iso())
         return self._send(200, public_view(rec), uid=uid)
+
+    def _statement(self, sample: bool, body: dict, uid):
+        """Unggah PDF mutasi (atau buat contoh saat simulasi). Unggahan berikutnya menambah riwayat."""
+        name = re.sub(r"[^\w .-]", "", str(body.get("name", ""))).strip()[:40] or "Rekening"
+        if sample:
+            lines = stmt.sample_lines(name, seed=uid[0] + name, mirror=[], platform_label="Gojek")
+            data, filename = stmt.build_pdf(name, lines), f"contoh-{name.lower()}.pdf"
+        else:
+            try:
+                data = base64.b64decode(str(body.get("data", "")), validate=True)
+            except (ValueError, TypeError):
+                return self._error(400, "bad_file", "Berkas tidak terbaca. Coba unggah ulang PDF-nya.", uid)
+            filename = re.sub(r"[^\w. -]", "", str(body.get("filename", "")))[:60] or "estatement.pdf"
+        try:
+            info = stmt.parse(stmt.pdf_text(data), name)
+        except stmt.StatementError as e:
+            return self._error(400, "unreadable", str(e), uid)
+        with _lock:
+            store = _users.setdefault(uid[0], {"wallets": {}}).setdefault("statements", {})
+            rec = store.get(name)
+            if rec:
+                rec["transactions"] = stmt.merge(rec["transactions"], info["transactions"])
+                rec["filename"] = filename
+            else:
+                rec = store[name] = {"transactions": info["transactions"], "filename": filename, "uploaded_at": now_iso()}
+            if info.get("balance") is not None:
+                rec["balance"] = info["balance"]
+            recalc_statement(rec)
+        return self._send(200, statement_view(name, rec), uid=uid)
 
 
 if __name__ == "__main__":

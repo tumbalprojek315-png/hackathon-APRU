@@ -22,7 +22,7 @@
 | `savings` | dana darurat (Rp & bulan), tabungan tujuan, setoran/bulan, kebiasaan, tempat simpan, jawaban tes guncangan | kesiapan menghadapi guncangan, saran tempat simpan yang aman |
 | `goals` | tujuan utama, semua tujuan, nominal, horizon, minat kredit resmi | **mengarahkan semua saran ke tujuan utama** |
 | `health` | skor, kategori, rasio sisa, DSR, rasio utang/pendapatan setahun, 4 pilar + semua komponen | menjelaskan skor dan memilih perbaikan dengan dampak terbesar |
-| `plan` | pembagian sisa uang (fase + porsi), jalur utang (progres, metode, perkiraan lunas), status 8 tangga + rapor | menjaga saran tetap konsisten dengan rencana di aplikasi |
+| `plan` | pembagian sisa uang (fase + porsi), jalur utang (progres, metode, perkiraan lunas), status enam step (`terkunci`, `aktif`, `selesai`, `isi_ulang`, `dijeda`, `dibuka_lagi`) + rapor | menjaga saran tetap konsisten dengan rencana di aplikasi |
 | `activity` | jumlah setoran/bayar utang 30 hari, 10 catatan terakhir | menilai konsistensi dan memberi apresiasi atau dorongan |
 | `history` | potret saat onboarding selesai, skor harian (30 hari) | menulis kesimpulan "awal vs sekarang" |
 

@@ -70,52 +70,78 @@ Setiap pilar bernilai 25 poin. Setiap komponen menampilkan poin, nilai sekarang,
 | Utang | Porsi cicilan (DSR) | 12 | ≤10% penuh. Turun linear sampai 0 di 50% |
 | | Utang bunga tinggi | 8 | tidak ada 8 · satu 3 · lebih dari satu 0 |
 | | Total utang | 5 | total utang ÷ pendapatan setahun ≤30% penuh |
-| Rencana & proteksi | BPJS Kesehatan | 6 | aktif / belum |
-| | BPJS Ketenagakerjaan | 5 | aktif / belum |
-| | Asuransi lain | 2 | opsional |
-| | Rekening bank | 4 | ada / belum |
-| | Tujuan yang jelas | 4 | ada tujuan + nominal |
-| | Simpanan di tempat aman | 4 | jumlah tempat selain uang tunai |
+| Rencana & proteksi | Asuransi lain | 5 | opsional |
+| | Rekening bank | 7 | ada / belum |
+| | Tujuan yang jelas | 7 | ada tujuan + nominal |
+| | Simpanan di tempat aman | 6 | jumlah tempat selain uang tunai |
 
 **Skor dihitung live.** Setiap catatan langsung menghitung ulang skor. Snackbar menampilkan "Skor X → Y", dan halaman "Cara naik ke skor 70" selalu menampilkan komponen dengan poin hilang terbesar beserta tautan ke langkah yang memperbaikinya.
 
-## 3. Tangga milestone
+## 3. Step 0 sampai 5 (landasan milestone v1)
 
-Langkah 7 mengikuti **tujuan utama** yang dipilih di onboarding (Ketahanan → Tujuan keuangan).
+Tangga 8 langkah diganti enam step. Semua ambang disimpan sebagai konstanta `MILESTONE` di `public/core.js`.
 
-| # | Langkah | Selesai jika |
-|---|---|---|
-| 1 | Fondasi: data rapi | onboarding selesai |
-| 2 | Keluar dari minus | pendapatan ≥ pengeluaran + cicilan |
-| 3 | Bantalan pertama Rp1 juta | dana darurat ≥ Rp1 jt |
-| 4 | Proteksi dasar: BPJS | BPJS Kesehatan + Ketenagakerjaan aktif |
-| 5 | Dana darurat 3 bulan | dana darurat ≥ 3 × pengeluaran |
-| 6 | Menabung rutin 10% | setoran/bulan ≥ 10% pendapatan |
-| 7 | Tujuan utama | *bebas utang* → semua utang lunas · *dana darurat* → 6 bulan · *kendaraan/usaha/anak/rumah* → tabungan tujuan (pot terpisah) mencapai nominal sebelum tenggat |
-| 8 | Siap ajukan kredit resmi | skor ≥70, riwayat terverifikasi 6 bulan, tanpa utang bunga tinggi, DSR ≤30% |
-| ★ | Rapor & kesimpulan | selalu bisa dibuka. Menjadi "rapor akhir" saat 1–8 selesai |
+| Step | Nama | Selesai jika | Mundur jika |
+|---|---|---|---|
+| 0 | Data rapi | onboarding selesai | tidak pernah |
+| 1 | Keluar dari minus | sisa 30 hari ≥ 5% pendapatan | sisa 30 hari < 0, dan bukan Mode Sakit |
+| 2 | Bantalan Rp3 jt + lunasi utang bunga tinggi | uang beku ≥ Rp3 jt **dan** tidak ada utang bunga tinggi, bertahan 28 hari | utang bunga tinggi baru, atau uang beku < Rp2 jt selama 30 hari karena pengambilan bukan darurat |
+| 3 | Dana darurat + mulai tujuan wajib | uang beku ≥ bulan target × pengeluaran bulanan terkunci, bertahan 28 hari | uang beku < 2/3 target selama 30 hari karena pengambilan bukan darurat |
+| 4 | Investasi 10% selama 3 bulan | setoran uang tumbuh ≥ 10% pendapatan, 3 bulan beruntun | satu bulan di bawah 10% memutus beruntun, uang tumbuh ditarik untuk konsumsi membuka step lagi |
+| 5 | Tujuan tumbuh | tiap tabungan tujuan mencapai nominalnya | tidak ada |
+| ★ | Rapor & kesimpulan | selalu bisa dibuka | - |
 
-Progres 100% hanya muncul bila **semua** syarat wajib terpenuhi, jadi pembulatan tidak bisa membuat langkah tampak selesai.
+**Bulan target dana darurat** mengikuti jumlah tanggungan: 0 sampai 3 orang jadi 3 bulan, 4 jadi 4, 5 jadi 5, 6 atau lebih jadi 6.
 
-### Rencana setoran adaptif
+**Uang beku** adalah satu saldo untuk bantalan Step 2 dan dana darurat Step 3. **Uang tumbuh** adalah dana investasi Step 4. **Tabungan tujuan** terpisah dari keduanya.
 
-Slider "Setor per hari narik" bergerak dari **Rp1.000** sampai **rata-rata pendapatan ojol per hari** (jumlah pendapatan per aplikasi. Kalau kosong, dipakai rata-rata harian sebulan terakhir atau pendapatan bulanan ÷ hari kerja), dengan langkah Rp1.000. Tombol cepat 5% / 10% / 20% dari pendapatan harian. Nilai awalnya diambil dari pembagian sisa uang bulan ini.
+### Mesin status
 
-## 4. Jalur paralel: pelunasan utang
+```
+terkunci -> aktif -> selesai
+                      |-> isi_ulang (darurat sah) -> selesai
+                      \-> dibuka_lagi -> aktif
+dijeda (step di bawahnya dibuka_lagi) -> kembali ke status sebelumnya saat step bawah pulih
+```
 
-Utang bunga tinggi tidak lagi menjadi satu anak tangga. Utang butuh berbulan-bulan, dan menahannya di satu langkah akan membuat driver "macet". Pelunasan menjadi **jalur paralel** yang membentang di bawah langkah 2–8:
+| Status | Arti |
+|---|---|
+| `terkunci` | step sebelumnya belum selesai |
+| `aktif` | sedang dikerjakan |
+| `selesai` | syarat terpenuhi, dan sudah bertahan untuk Step 2 dan 3 |
+| `isi_ulang` | uang beku dipakai untuk darurat sah. Bukan kegagalan, skor tidak dikurangi karena ini |
+| `dijeda` | step di bawahnya sedang `dibuka_lagi`. Progres tidak dihapus |
+| `dibuka_lagi` | syarat mundur terpenuhi, step dikerjakan ulang |
 
-- **Progres** = utang yang sudah dibayar ÷ jumlah utang tertinggi yang pernah tercatat.
-- **Titik pemeriksaan**: (1) utang bunga tinggi lunas, (2) semua utang konsumtif lunas.
-- **Metode** bisa dipilih pengguna:
-  - *Bunga termahal dulu* (avalanche): paling hemat bunga.
-  - *Sisa terkecil dulu* (snowball): riset Kellogg menunjukkan orang lebih sering menuntaskan utang bila memulai dari saldo kecil.
-- **Simulasi** bulanan: semua cicilan tetap dibayar, tambahan diarahkan ke utang nomor 1, dan cicilan yang lunas digulirkan ke utang berikutnya.
-- **Aturan selama jalur berjalan**:
-  - DSR ≤30% (batas OJK untuk pinjol mulai 2026, SEOJK 19/2025).
-  - Tidak mengambil pinjol/paylater baru.
-  - Bayar tepat waktu.
-- Langkah lain tetap terhubung ke jalur ini. Komponen skor "Utang bunga tinggi" dan syarat kredit (langkah 8) membaca jalur yang sama. Bila tujuan utama = bebas utang, langkah 7 memakai progres jalur ini.
+Aturan global: saldo dan riwayat tidak pernah dihapus saat mundur, batas mundur selalu lebih rendah dari batas selesai, semua target yang bergantung pengeluaran memakai **pengeluaran bulanan terkunci** (dikunci tiap awal bulan), dan tiap perubahan status dicatat di `S.milestones.stLog` untuk ditampilkan di Rapor.
+
+**Darurat sah**: sakit, kecelakaan, motor rusak, keluarga meninggal, akun diblokir, bencana. Pengambilan uang beku wajib memilih alasan.
+
+**Mode Sakit**: periode yang ditandai pengguna tidak bisa narik. Hari di periode ini tidak memicu kemunduran Step 1.
+
+### Pembagian tujuan
+
+| Pilihan | Kelompok |
+|---|---|
+| Biaya pendidikan awal, modal menikah dengan tanggal pasti, kendaraan untuk kerja | wajib, mulai Step 3 |
+| Modal menikah tanpa tanggal, kendaraan pribadi, modal usaha sampingan, beli rumah | tumbuh, mulai Step 5 |
+
+Wajib kalau punya tenggat yang tidak bisa digeser, atau melindungi dan menambah penghasilan. Selain itu tumbuh. Total porsi ke semua tujuan wajib dibatasi 30% dari sisa uang. Kalau tenggat tujuan wajib jatuh sebelum perkiraan driver sampai di Step 3, onboarding menampilkan peringatan.
+
+## 4. Utang bunga tinggi dan jalur pelunasan
+
+Utang bunga tinggi menjadi **syarat selesai Step 2**, bukan jalur terpisah. `debtLane` tetap dipakai untuk progres dan simulasi pelunasan.
+
+**Klasifikasi** (`isHighInterest` di `core.js`):
+- Pinjol, paylater, rentenir, dan kartu kredit langsung dianggap tinggi.
+- Utang keluarga dan teman tidak pernah dianggap tinggi, jadi tidak menahan Step 2. Tetapi wajib punya jadwal bayar, dan pengingat muncul kalau belum ada.
+- Selain itu dihitung bunga efektif per tahun dari pokok, cicilan, dan tenor (bisection pada nilai sekarang anuitas). Tinggi kalau ≥ 18% per tahun. **Data kurang dianggap tinggi.**
+
+Contoh uji: pokok Rp1.000.000, cicilan Rp600.000, tenor 2 bulan menghasilkan sekitar 13% per bulan, terklasifikasi tinggi.
+
+**Pembagian sisa uang selama Step 2**: selama ada utang bunga tinggi, 70% ke utang dan 30% ke bantalan. Setelah lunas, 100% ke bantalan, dan cicilan yang lunas menambah sisa uang. Saat status `isi_ulang`, 50% sisa uang diarahkan ke uang beku sampai kembali ke target.
+
+**Metode pelunasan** tetap bisa dipilih: bunga termahal dulu (avalanche) atau sisa terkecil dulu (snowball).
 
 ## 5. Pembagian sisa uang bulanan
 

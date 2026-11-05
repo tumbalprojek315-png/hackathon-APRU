@@ -9,7 +9,20 @@ python server.py
 ```
 
 Buka http://127.0.0.1:5174 (Oracle memakai 5173, jadi keduanya bisa jalan bersamaan). Tidak perlu install apa pun (Python 3.10+ saja).
-Halaman harus dibuka lewat server ini. Membuka file HTML langsung membuat penghubungan e-wallet tidak jalan.
+
+## Mode contoh (tanpa server)
+
+Kalau halaman dibuka tanpa `server.py`, misalnya dari GitHub Pages, aplikasi otomatis memakai **mode contoh**:
+semua jawaban `/api/...` dilayani di browser oleh `public/demo-mode.js` dari `public/demo-data.json`.
+Jadi penghubungan e-wallet tetap bisa didemokan lewat tautan. Isi datanya sama dengan keluaran `MockProvider`
+saat server berjalan, karena memang dibuat olehnya. Yang tidak bisa jalan tanpa server hanya pembacaan PDF
+e statement asli, dan di mode contoh tombolnya diganti "Pakai contoh".
+
+Kalau `openfinance/mock.py` diubah, buat ulang datanya:
+
+```bash
+python tools/buat-data-contoh.py
+```
 
 ## Struktur
 

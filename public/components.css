@@ -342,6 +342,25 @@ body.editing #doneBtn { display: inline-flex; color: var(--fg); font-weight: 800
 .cat-range .money .input { min-width: 0; font-size: .92rem; padding-left: 36px; padding-right: 8px; }
 .cat-range .money .input::placeholder { font-size: .8rem; }
 
+/* Kartu dompet yang dibuktikan lewat e statement */
+.wallet-logo.doc { width: 76px; height: 44px; display: grid; place-items: center; flex: none; border-radius: 12px; border: 1px dashed var(--border); background: var(--secondary); font-weight: 800; font-size: .9rem; letter-spacing: .04em; }
+.wcard.doc .doc-hist { display: grid; gap: 6px; }
+.wcard.doc .doc-hist .hint { margin: 0; }
+
+/* Penjaga coverage: angka dokumen vs angka isian, lalu seberapa besar yang terbukti */
+.cov-rows { display: grid; gap: 0; margin: 0 0 4px; border-radius: .7rem; background: var(--secondary); padding: 2px 12px; }
+.cov-rows div { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; padding: 7px 0; }
+.cov-rows div + div { border-top: 1px solid var(--border); }
+.cov-rows dt { font-size: .8rem; color: var(--muted-fg); font-weight: 600; }
+.cov-rows dd { margin: 0; font-weight: 800; font-size: .92rem; white-space: nowrap; }
+.cov-rows .gap dd { color: var(--st-serious-ink, var(--st-serious)); }
+
+.cov-track { height: 10px; border-radius: 99px; background: var(--secondary); border: 1px solid var(--border); overflow: hidden; }
+.cov-track i { display: block; height: 100%; border-radius: 99px; background: var(--st-good); }
+.cov-track i.warn { background: var(--st-warn); }
+.cov-track i.serious { background: var(--st-serious); }
+.cov-track i.good { background: var(--st-good); }
+
 /* Langkah Izin data: daftar manfaat e-wallet */
 .check-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; font-size: .88rem; }
 .check-list li { display: flex; gap: 8px; }
