@@ -138,6 +138,8 @@ Aturan global: saldo dan riwayat tidak pernah dihapus saat mundur, batas mundur 
 
 Wajib kalau punya tenggat yang tidak bisa digeser, atau melindungi dan menambah penghasilan. Selain itu tumbuh. Total porsi ke semua tujuan wajib dibatasi 30% dari sisa uang. Kalau tenggat tujuan wajib jatuh sebelum perkiraan driver sampai di Step 3, onboarding menampilkan peringatan.
 
+**Tujuan wajib dengan tenggat.** Untuk tiap tujuan wajib yang punya tenggat, Laju menunjukkan berapa yang perlu disisihkan per hari sampai tanggal itu: (nominal − yang sudah ditabung) ÷ sisa hari, dibulatkan ke atas per Rp1.000. Kalau angkanya lebih besar dari sisa uang harian ((pendapatan − pengeluaran) ÷ 30), Laju menyarankan cicil, cari keringanan, atau kecilkan nominal. Ini hanya catatan, tidak mengubah urutan tangga.
+
 ## 4. Utang bunga tinggi dan jalur pelunasan
 
 Utang bunga tinggi menjadi **syarat selesai Step 2**, bukan jalur terpisah. `debtLane` tetap dipakai untuk progres dan simulasi pelunasan.
@@ -216,6 +218,13 @@ Transfer dari orang, top up dari akun sendiri, uang masuk yang tidak dikenali, d
 Setiap alasan tier ditampilkan ke pengguna bersama cara menaikkannya. Data yang terakhir diperbarui lebih dari 14 hari diberi label "data belum diperbarui" yang ikut terkirim ke bank. Plafon tidak ditampilkan dalam rupiah, karena angkanya masih perlu dikalibrasi.
 
 Dicakup di prototipe: kasus A1 sampai A5, B1, B2, B5, B6, C1 (dompet "Lainnya" + pencocokan salah ketik), C2 (rekening bank bisa dihubungkan), C3 (OTP salah 3 kali), C4 (izin ditolak), C5, C7, D1, D2, D4, E1 (status kendaraan Kredit tanpa cicilan), F6, G3, G4. Belum dibangun: unggah PDF mutasi, KYC, SLIK OJK, layar "Bantu kenali transaksi", pengenalan pinjol/bansos/dana talangan, dan semua kasus setelah pinjaman cair.
+
+**Jejak per bulan.** Selain tier, Laju menilai tiap bulan (per 30 hari, mundur dari hari ini), bukan gabungan semua bulan. Yang dinilai hanya bulan yang dicakup penuh oleh semua akun terhubung, supaya akun dengan riwayat lebih pendek tidak membuat bulan terbaru tampak naik:
+- penurunan tajam: pencairan 30 hari terakhir turun 30% atau lebih dari median bulan sebelumnya;
+- naik turun lebar: koefisien variasi pencairan bulanan di atas 0,35 (minimal 3 bulan);
+- bulan minus: uang keluar lebih besar dari uang masuk di akun terhubung (pindahan antar akun sendiri tidak dihitung, biaya admin dihitung keluar).
+
+Hasilnya menjadi catatan di status data dan ikut di laporan bank. Tier tidak berubah karenanya. E statement dihitung dengan cara yang sama dengan e-wallet: angka utama dari 30 hari terakhir dokumen, bulan sebelumnya hanya untuk riwayat.
 
 ## 7. Sumber
 

@@ -654,12 +654,10 @@
   // Server prototipe menyimpan izin e-wallet di memori: setelah server dimulai ulang daftarnya kosong.
   // Ringkasan yang sudah tersinkron tetap dipakai (ditandai "stale") supaya angka tidak berubah diam-diam.
   function mergeServerWallets(server) {
-    // E statement di server yang tidak dikenal perangkat ini adalah sisa data lama (mis. setelah reset): dihapus,
-    // supaya tidak ikut terhitung diam diam. E statement selalu tersimpan di perangkat begitu diunggah.
+    // E statement di server yang tidak dikenal perangkat ini (mis. sisa sebelum reset) tidak dipakai, supaya tidak
+    // ikut terhitung diam diam. Tidak dihapus dari server: bisa saja baru diunggah dari tab lain yang masih terbuka.
     const known = new Set(S.wallets.map(w => w.walletId));
-    const orphan = server.filter(w => w.source === "statement" && !known.has(w.walletId));
-    orphan.forEach(w => dropRemote(w.walletId).catch(() => {}));
-    server = server.filter(w => !orphan.includes(w));
+    server = server.filter(w => w.source !== "statement" || known.has(w.walletId));
     const missing = S.wallets.filter(w => w.summary && !server.some(x => x.walletId === w.walletId));
     // E statement yang hilang dari server (mis. server dijalankan ulang) tetap dipakai apa adanya: isinya dari dokumen
     // yang sudah dibaca, bukan izin yang bisa berakhir. Hanya e-wallet yang ditandai "Data terakhir".
@@ -1221,6 +1219,7 @@ income: { perPlatform: { gojek: 160000, grab: 110000 }, bonus: 400000, tips: 150
     const months = Math.max(...H.map(h => h.months));
     const series = (key) => Array.from({ length: months }, (_, i) => H.reduce((t, h) => t + (h[key][i] || 0), 0));
     const plat = series("monthlyPlatform"), bonus = series("monthlyBonus").filter(v => v > 0);
+    const track = monthlyTrack(H, months, plat, series);
     const weight = live.map(w => (w.summary.incomePlatform || 0) + (w.summary.expenseTotal || 0) + 1);
     const classified = H.reduce((t, h, i) => t + h.classifiedShare * weight[i], 0) / weight.reduce((t, v) => t + v, 0);
     // median bulanan, bukan rata-rata (Kasus D1, G3). Bonus hanya kalau muncul minimal 3 bulan, bobot setengah (Kasus D2).
@@ -1234,10 +1233,38 @@ income: { perPlatform: { gojek: 160000, grab: 110000 }, bonus: 400000, tips: 150
     const unsupported = Object.entries(S.profile.payoutTo || {}).filter(([n, v]) => v === "ya" && (S.profile.channels || []).includes("c:" + n)).map(([n]) => n);
     if (unsupported.length) { cap2(); add(`Pencairan juga masuk ke ${unsupported.join(", ")} yang belum bisa dihubungkan.`); }   // Kasus C1
     if (months < 6) add(`Riwayat transaksi baru ${months} bulan. Butuh 6 bulan untuk terverifikasi penuh.`);   // Kasus C7, B1
+    track.notes.forEach(t => add(t));
     if (classified < 0.85) add(`${Math.round(classified * 100)}% transaksi dikenali. Butuh minimal 85%.`);   // Kasus F6
     const old = live.filter(w => w.syncedAt && Date.now() - new Date(w.syncedAt).getTime() > 14 * 864e5);
     if (old.length) add(`Data ${old.map(w => channelLabel(w.walletId)).join(", ")} terakhir diperbarui ${relTime(old[0].syncedAt)}. Label "data belum diperbarui" ikut terkirim ke bank.`, { href: ew, label: "Sinkron ulang" });   // Kasus C5
-    return { tier, ...TIER[tier], reasons, months, classified, bankIncome, live: live.length };
+    return { tier, ...TIER[tier], reasons, months, classified, bankIncome, live: live.length, track };
+  }
+
+  // Jejak per bulan (indeks 0 = 30 hari terakhir). Dinilai per bulan, bukan digabung, karena bank melihat konsistensi:
+  // bulan terendah, penurunan tajam, dan seberapa lebar naik turunnya. Hanya bulan yang tercakup penuh 30 hari yang
+  // dinilai (bulan paling lama biasanya sebagian). Tidak mengubah tier, hanya dicatat dan ikut di laporan bank.
+  function monthlyTrack(H, months, plat, series) {
+    // hanya bulan yang dicakup SEMUA akun: akun dengan riwayat lebih pendek (mis. e statement 1 bulan) akan
+    // membuat bulan terbaru tampak naik kalau ikut dijumlah
+    const full = Math.min(months, ...H.map(h => h.fullMonths ?? h.months));
+    const hasFlow = H.every(h => Array.isArray(h.monthlyIn));
+    const inc = plat.slice(0, full);
+    const out = hasFlow ? series("monthlyOut").slice(0, full) : [];
+    const moneyIn = hasFlow ? series("monthlyIn").slice(0, full) : [];
+    const net = moneyIn.map((v, i) => v - (out[i] || 0));
+    const notes = [];
+    const t = { months: full, income: inc, out, net, lowest: null, cv: null, drop: null, minusMonths: 0, notes };
+    if (full < 2) return t;
+    const mean = inc.reduce((a, b) => a + b, 0) / full;
+    t.lowest = Math.min(...inc);
+    t.cv = mean > 0 ? Math.sqrt(inc.reduce((a, v) => a + (v - mean) ** 2, 0) / full) / mean : null;
+    const before = medianOf(inc.slice(1));
+    t.drop = before > 0 ? Math.max(0, 1 - inc[0] / before) : null;
+    t.minusMonths = net.filter(v => v < 0).length;
+    if (t.drop != null && t.drop >= 0.3) notes.push(`Pencairan 30 hari terakhir ${rp(inc[0])}, turun ${Math.round(t.drop * 100)}% dari biasanya (${rp(Math.round(before))}).`);
+    if (full >= 3 && t.cv != null && t.cv > 0.35) notes.push(`Pencairan per bulan naik turun cukup lebar: terendah ${rp(t.lowest)}, tertinggi ${rp(Math.max(...inc))}.`);
+    if (t.minusMonths) notes.push(`${t.minusMonths} dari ${full} bulan, uang keluar lebih besar dari uang masuk di akun yang terhubung.`);
+    return t;
   }
 
   // ---------- konteks bersama untuk semua tangga ----------
@@ -1705,7 +1732,9 @@ income: { perPlatform: { gojek: 160000, grab: 110000 }, bonus: 400000, tips: 150
         volatility: vol.ready ? { label: vol.label, cv: Math.round(vol.cv * 100) / 100 } : null,
         updatedByUser: S.overrides.income != null,
         eWallet: { wallets: agg.count, monthlyPayouts: Math.round(agg.incomePlatform), otherTransfersIn: Math.round(agg.incomeOther), months: verifiedMonths() },
-        dataTrust: (() => { const t = dataTrust(); return { tier: t.tier, label: t.label, historyMonths: t.months, classifiedShare: t.classified, bankRecognisedIncomeMonthly: t.bankIncome, reasons: t.reasons.map(r => r.t) }; })(),
+        dataTrust: (() => { const t = dataTrust(); return { tier: t.tier, label: t.label, historyMonths: t.months, classifiedShare: t.classified, bankRecognisedIncomeMonthly: t.bankIncome, reasons: t.reasons.map(r => r.t),
+          // per 30 hari, indeks 0 = 30 hari terakhir. Hanya bulan yang tercakup penuh.
+          monthly: t.track ? { incomePlatform: t.track.income, moneyOut: t.track.out, net: t.track.net, lowestIncome: t.track.lowest, incomeVariation: t.track.cv == null ? null : Math.round(t.track.cv * 100) / 100, latestDropVsUsual: t.track.drop == null ? null : Math.round(t.track.drop * 100) / 100, monthsOutflowAboveInflow: t.track.minusMonths } : null }; })(),
       },
       expenses: {
         monthlyUsed: Math.round(c.expMid), range: { min: Math.round(c.expMin), max: Math.round(c.expMax) }, verifiedShare: Math.round(c.shareOut * 100) / 100,

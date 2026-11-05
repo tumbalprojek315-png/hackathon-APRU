@@ -79,10 +79,11 @@ def recalc_statement(rec: dict, overrides: dict | None = None) -> None:
     bukan dari tanggal hari ini, supaya mutasi bulan lalu tetap terbaca utuh."""
     raw = rec["transactions"]
     days = sorted(t.date[:10] for t in raw)
-    first, last = date.fromisoformat(days[0]), date.fromisoformat(days[-1])
-    span = max(1, (last - first).days + 1)
-    summary, items = summarize(raw, span, today=last, overrides=overrides)
-    summary["history"] = history(raw, today=last, overrides=overrides)
+    last = date.fromisoformat(days[-1])
+    # Sama seperti e-wallet: angka utama = 30 hari terakhir di dokumen, tidak dirata ratakan dengan bulan lain.
+    # Bulan sebelumnya hanya masuk riwayat per bulan, yang dihitung mundur dari hari ini supaya sejajar dengan e-wallet.
+    summary, items = summarize(raw, PERIOD_DAYS, today=last, overrides=overrides)
+    summary["history"] = history(raw, overrides=overrides)
     rec.update(summary=summary, recent=items[:RECENT_LIMIT], **{"from": days[0], "to": days[-1]})
 
 
@@ -95,6 +96,7 @@ def recompute(user: dict) -> None:
     accounts = {wid: r["raw"] for wid, r in wallets.items()}
     accounts.update({"c:" + n: r["transactions"] for n, r in stmts.items() if r.get("transactions")})
     numbers = {wid: r.get("phone", "") for wid, r in wallets.items()}   # nomor terverifikasi saat penghubungan
+    numbers.update({"c:" + n: r.get("phone", "") for n, r in stmts.items() if r.get("phone")})   # nomor di kepala e statement
     ov = pair_transfers(accounts, numbers)
     for r in wallets.values():
         summary, items = summarize(r["raw"], PERIOD_DAYS, overrides=ov)
@@ -402,6 +404,8 @@ class Handler(SimpleHTTPRequestHandler):
                 rec = store[name] = {"transactions": info["transactions"], "filename": filename, "uploaded_at": now_iso()}
             if info.get("balance") is not None:
                 rec["balance"] = info["balance"]
+            if info.get("phone"):
+                rec["phone"] = info["phone"]   # nomor HP pemilik di kepala dokumen (mis. riwayat GoPay)
             user = _users[uid[0]]
             recompute(user)
             others = [v for v in all_views(user) if v["walletId"] != "c:" + name]

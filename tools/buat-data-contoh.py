@@ -46,9 +46,10 @@ def statement_record(name: str) -> dict:
     raw = info["transactions"]
     days = sorted(t.date[:10] for t in raw)
     from datetime import date
-    first, last = date.fromisoformat(days[0]), date.fromisoformat(days[-1])
-    summary, items = summarize(raw, max(1, (last - first).days + 1), today=last)
-    summary["history"] = history(raw, today=last)
+    last = date.fromisoformat(days[-1])
+    # sama dengan server: 30 hari terakhir dokumen, riwayat per bulan dihitung mundur dari hari ini
+    summary, items = summarize(raw, PERIOD_DAYS, today=last)
+    summary["history"] = history(raw)
     return {
         "walletId": "c:" + name, "source": "statement", "accountName": name,
         "accountRef": f"E statement · contoh-{name.lower()}.pdf",

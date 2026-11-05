@@ -1448,11 +1448,20 @@ window.LAJU_EN = {
   "Bisa pilih beberapa.": "You can pick several.",
   // ---------- nomor HP tiap e-wallet di Izin data (5 Nov) ----------
   "Nomor HP tiap e-wallet": "Phone number for each e-wallet",
+  "Cukup satu bulan untuk sekarang.": "One month is enough for now.",
+  "Bulan berikutnya diunggah lewat Profil, bagian E-wallet & izin.": "Upload the next months from Profile, under E-wallet & consent.",
   "Diisi dari nomor akun Laju. Ganti kalau e-wallet itu memakai nomor lain.": "Filled in from your Laju account number. Change it if that e-wallet uses another number.",
   "Saat menghubungkan, nomor ini sudah terisi di halaman penyedia, jadi Anda tinggal memasukkan OTP. Nomornya harus sama dengan akun yang dihubungkan.": "When you connect, this number is already filled in on the provider's page, so you only need to enter the OTP. It must match the account you connect.",
 };
 
 window.LAJU_EN_RULES = [
+  ["^Tenggat (.+) sudah lewat\\. Perbarui tanggalnya\\.$", "The deadline for $t1 has passed. Update the date."],
+  ["^(.+) (\\S+) jatuh (\\S+)\\. Butuh sekitar (\\S+) per hari, lebih besar dari sisa uang harian Anda \\((\\S+)\\)\\. Coba cicil, cari keringanan, atau kecilkan nominalnya\\.$",
+    "$t1: $2 due $3. You need about $4 a day, more than your daily leftover ($5). Try paying in instalments, asking for relief, or lowering the amount."],
+  ["^(.+) (\\S+) jatuh (\\S+)\\. Sisihkan sekitar (\\S+) per hari mulai sekarang\\.$", "$t1: $2 due $3. Set aside about $4 a day from now."],
+  ["^Pencairan (.+) hari terakhir (.+), turun (.+) dari biasanya \\((.+)\\)\\.$", "Payouts in the last $1 days were $2, down $3 from usual ($4)."],
+  ["^Pencairan per bulan naik turun cukup lebar: terendah (.+), tertinggi (.+)\\.$", "Monthly payouts swing widely: lowest $1, highest $2."],
+  ["^(.+) dari (.+) bulan, uang keluar lebih besar dari uang masuk di akun yang terhubung\\.$", "In $1 of $2 months, more money went out than came in across the connected accounts."],
   ["^Nomor (\\S+) yang dihubungkan \\(akhiran (.+)\\) beda dengan nomor yang Anda isi di Izin data \\((.+)\\)\\. Hubungkan pakai nomor yang sama, atau ubah nomornya di Izin data\\.$",
     "The $1 number you connected (ending $2) differs from the number you entered in Data consent ($3). Connect with the same number, or change it in Data consent."],
   ["^Nomor (.+) sudah terisi\\. Anda tinggal memasukkan OTP$", "Number $1 is already filled in. You only need to enter the OTP"],

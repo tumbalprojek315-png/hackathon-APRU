@@ -12,6 +12,15 @@ Format baris yang dikenali (satu transaksi per baris):
     2026-11-03  Pembayaran QRIS Warung Bu Sri      -25.000
     03/11/2026  Pencairan pendapatan mitra  CR  150.000      (CR = masuk, DB = keluar)
 Saldo akhir dibaca dari baris "Saldo akhir: Rp1.250.000".
+
+Format blok (riwayat transaksi GoPay, satu transaksi beberapa baris):
+    30/10/2026
+    04:21
+    Spotify A320261029212101UZ8I
+    QpBAgSID
+    GoPay Saldo -Rp119.900
+Jumlah tanpa tanda minus = uang masuk. Metode pembayaran selain saldo dompet (mis. "BCA VA") ikut ke
+keterangan, supaya top up dari rekening bisa dipasangkan. Nomor HP pemilik di kepala dokumen ikut dibaca.
 """
 from __future__ import annotations
 
@@ -27,6 +36,12 @@ ROW = re.compile(
     r"^(?P<d>\d{2}[/-]\d{2}[/-]\d{4}|\d{4}-\d{2}-\d{2})\s+(?P<desc>.+?)\s+"
     r"(?P<sign>[+\-−]|CR|DB|Masuk|Keluar)?\s*(?:Rp\.?\s?)?(?P<amt>\d{1,3}(?:[.,]\d{3})+|\d+)(?:,\d{2})?\s*(?P<sign2>CR|DB)?$",
     re.IGNORECASE)
+DATE_ONLY = re.compile(r"^(\d{2}/\d{2}/\d{4})$")
+TIME_ONLY = re.compile(r"^(\d{2}):(\d{2})$")
+BLOCK_AMT = re.compile(r"^(?P<method>.*?)\s*(?P<sign>[-−])?\s*Rp\.?\s?(?P<amt>\d{1,3}(?:\.\d{3})+|\d+)(?:,\d{2})?$")
+TX_ID = re.compile(r"\s+[A-Za-z0-9]{12,}$")       # ID transaksi panjang di ujung keterangan
+OWNER_PHONE = re.compile(r"^\+?(?:62|0)8\d{7,12}$")
+SELF_METHOD = re.compile(r"^(gopay saldo|saldo|ovo cash|dana saldo|shopeepay saldo)?$", re.IGNORECASE)
 BALANCE = re.compile(r"saldo akhir\s*:?\s*Rp\.?\s?(\d{1,3}(?:[.,]\d{3})+|\d+)", re.IGNORECASE)
 
 
@@ -114,10 +129,41 @@ def _date(s: str) -> date:
     return date(int(y), int(m), int(d))
 
 
+def _parse_blocks(lines: list[str], name: str) -> list[RawTransaction]:
+    """Format blok: baris tanggal sendiri, baris jam, keterangan (+ ID transaksi), lalu baris metode + jumlah."""
+    txs: list[RawTransaction] = []
+    starts = [i for i, l in enumerate(lines) if DATE_ONLY.match(l)]
+    for n, i in enumerate(starts):
+        block = lines[i + 1:(starts[n + 1] if n + 1 < len(starts) else len(lines))]
+        amt_i = next((k for k, l in enumerate(block) if BLOCK_AMT.match(l)), None)
+        if amt_i is None:
+            continue
+        try:
+            d = _date(DATE_ONLY.match(lines[i]).group(1))
+        except ValueError:
+            continue
+        hh, mm = "12", "00"
+        rest = block[:amt_i]
+        if rest and TIME_ONLY.match(rest[0]):
+            hh, mm = TIME_ONLY.match(rest[0]).groups()
+            rest = rest[1:]
+        desc = TX_ID.sub("", rest[0]).strip() if rest else ""
+        m = BLOCK_AMT.match(block[amt_i])
+        method = m.group("method").strip()
+        if method and not SELF_METHOD.match(method):
+            desc = f"{desc} lewat {method}".strip()
+        if not desc:
+            continue
+        txs.append(RawTransaction(id=f"st-{name}-{d.isoformat()}-b{i:04d}", date=f"{d.isoformat()}T{hh}:{mm}:00+07:00",
+                                  amount=_amount(m.group("amt")), direction="out" if m.group("sign") else "in", description=desc))
+    return txs
+
+
 def parse(text: str, name: str) -> dict:
     """Baris teks mutasi -> transaksi Laju. Error kalau tidak ada satu baris pun yang terbaca."""
     txs: list[RawTransaction] = []
-    for k, line in enumerate(l.strip() for l in text.splitlines()):
+    lines = [l.strip() for l in text.splitlines()]
+    for k, line in enumerate(lines):
         m = ROW.match(line)
         if not m:
             continue
@@ -135,10 +181,14 @@ def parse(text: str, name: str) -> dict:
         txs.append(RawTransaction(id=f"st-{name}-{d.isoformat()}-{k:04d}", date=f"{d.isoformat()}T12:00:00+07:00",
                                   amount=_amount(m.group("amt")), direction=direction, description=m.group("desc").strip()))
     if not txs:
+        txs = _parse_blocks(lines, name)
+    if not txs:
         raise StatementError("Tidak ada transaksi yang terbaca. Pastikan PDF berasal dari aplikasinya langsung (bukan foto atau scan), atau isi rekap bulanan.")
     b = BALANCE.search(text)
     days = sorted(t.date[:10] for t in txs)
-    return {"transactions": txs, "balance": _amount(b.group(1)) if b else None, "from": days[0], "to": days[-1]}
+    owner = next((l for l in lines[:15] if OWNER_PHONE.match(l.replace(" ", ""))), None)
+    return {"transactions": txs, "balance": _amount(b.group(1)) if b else None, "from": days[0], "to": days[-1],
+            "phone": re.sub(r"\D", "", owner) if owner else None}
 
 
 def merge(old: list[RawTransaction], new: list[RawTransaction]) -> list[RawTransaction]:

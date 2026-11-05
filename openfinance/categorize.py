@@ -122,6 +122,7 @@ def history(raw: list[RawTransaction], today: date | None = None, months: int = 
     """
     today = today or date.today()
     plat, bonus = [0] * months, [0] * months
+    money_in, money_out = [0] * months, [0] * months   # semua uang masuk dan keluar per bulan, tanpa pindahan antar akun sendiri
     first = None
     total = unknown = 0
     ov = overrides or {}
@@ -134,13 +135,24 @@ def history(raw: list[RawTransaction], today: date | None = None, months: int = 
         amt = t["amount"]
         if t["kind"] == "income_platform":
             (bonus if t.get("bonus") else plat)[i] += amt
+        if t["kind"] in ("income_platform", "income_other", "transfer_in"):
+            money_in[i] += amt
+        elif t["kind"] in ("expense", "debt"):
+            money_out[i] += amt
+        elif t["kind"] == "internal" and t.get("fee"):
+            money_out[i] += t["fee"]
         if t["kind"] != "internal":
             total += amt
             if t["kind"] == "income_other" or (t["kind"] == "expense" and t["category"] == "lainnya"):
                 unknown += amt
     covered = 0 if first is None else min(months, (today - first).days // 30 + 1)
+    # bulan yang tercakup penuh 30 hari. Bulan paling lama biasanya hanya sebagian, jadi tidak dipakai menilai tren.
+    full = 0 if first is None else min(months, ((today - first).days + 1) // 30)
     return {
         "months": covered,
+        "fullMonths": full,
+        "monthlyIn": money_in[:covered],
+        "monthlyOut": money_out[:covered],
         "firstDate": first.isoformat() if first else None,
         "monthlyPlatform": plat[:covered],
         "monthlyBonus": bonus[:covered],

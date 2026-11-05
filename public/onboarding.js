@@ -392,7 +392,7 @@
       </dl>
       <p class="hint">Periode ${fmtDate(p.from) || "-"} sampai ${fmtDate(p.to) || "-"}${w.balance != null ? ` · saldo akhir ${rp(w.balance)}` : ""}</p>
       <div class="wactions">
-        <button type="button" class="link-btn" data-action="docAdd" data-id="${esc(w.accountName)}">Unggah bulan berikutnya</button>
+        ${ui.edit ? `<button type="button" class="link-btn" data-action="docAdd" data-id="${esc(w.accountName)}">Unggah bulan berikutnya</button>` : ""}
         <button type="button" class="icon-btn" data-action="docDelete" data-id="${esc(w.accountName)}" aria-label="Hapus ${esc(w.accountName)}">${ICON.trash}</button>
       </div>
     </article>`;
@@ -462,13 +462,13 @@
           <div><dt>Pengeluaran</dt><dd class="num">${rp(sm.expenseTotal + sm.debtPayments)}</dd></div>
           <div><dt>Saldo akhir</dt><dd class="num">${w.balance != null ? rp(w.balance) : "-"}</dd></div>
         </dl>
-        <div class="doc-hist">
+        ${ui.edit ? `<div class="doc-hist">
           <div class="kv" style="margin:0"><span>Riwayat e statement</span><b class="num">${m} dari 6 bulan</b></div>
           <div class="cov-track"><i class="good" style="width:${Math.max((m / 6) * 100, 2)}%"></i></div>
           <p class="hint">Bukti dokumen dihitung sebanding lama riwayatnya. Unggah tiap bulan sampai 6 bulan.</p>
-        </div>
+        </div>` : `<p class="hint">Cukup satu bulan untuk sekarang. Bulan berikutnya diunggah lewat Profil, bagian E-wallet &amp; izin.</p>`}
         <div class="wactions">${file}
-          ${bisaUnggah ? `<button type="button" class="link-btn" data-action="stUpload" data-id="${esc(name)}">Unggah bulan berikutnya</button>` : ""}
+          ${bisaUnggah && ui.edit ? `<button type="button" class="link-btn" data-action="stUpload" data-id="${esc(name)}">Unggah bulan berikutnya</button>` : ""}
           ${ui.config?.demo || ui.config?.mode === "simulasi" ? `<button type="button" class="link-btn" data-action="stSample" data-id="${esc(name)}">Pakai contoh</button>` : ""}
           <button type="button" class="icon-btn" data-action="stDelete" data-id="${esc(name)}" aria-label="Hapus e statement ${esc(name)}">${ICON.trash}</button>
         </div>`;
@@ -844,16 +844,23 @@
   }
 
   // Peringatan kalau tenggat tujuan wajib jatuh sebelum perkiraan driver sampai di Step 3.
+  // Tujuan wajib dengan tenggat: tunjukkan berapa yang perlu disisihkan per hari sampai tanggal itu. Tidak
+  // menampilkan perkiraan lama sampai Step 3, karena angka belasan bulan tidak membantu dan membingungkan.
   function goalDeadlineWarning() {
-    const wajib = (S.resilience.goals || []).filter(id => goalGroup(id) === "wajib");
-    const c = calc(), net = c.income - c.expense;
-    if (!wajib.length || net <= 0) return "";
-    const target = ddMonths(Number(S.profile.dependents) || 0) * c.expense;
-    const bulanKeStep3 = Math.ceil((MILESTONE.STEP2_BUFFER_TARGET + target) / net);
-    const batas = new Date(); batas.setMonth(batas.getMonth() + bulanKeStep3);
-    const cepat = wajib.filter(id => { const dl = S.resilience.goalData?.[id]?.deadline; return dl && parseIso(dl) < batas; });
-    if (!cepat.length) return "";
-    return `<div class="ew-partial" role="status">${ICON.info}<span>Tenggat ${cepat.map(id => esc(GOALS.find(g => g.id === id).label)).join(", ")} jatuh sebelum perkiraan Anda sampai di Step 3, sekitar ${bulanKeStep3} bulan lagi. Pertimbangkan mundurkan tenggatnya atau kecilkan nominalnya.</span></div>`;
+    const c = calc(), netDay = Math.max(0, Math.floor((c.income - c.expense) / 30));
+    const today = new Date(); today.setHours(0, 0, 0, 0);
+    const notes = (S.resilience.goals || []).filter(id => goalGroup(id) === "wajib").map(id => {
+      const g = S.resilience.goalData?.[id] || {}, need = (Number(g.amount) || 0) - (Number(g.saved) || 0);
+      if (!g.deadline || need <= 0) return "";
+      const days = Math.round((parseIso(g.deadline) - today) / 864e5);
+      const label = esc(goalLabel(id));
+      if (days <= 0) return `Tenggat ${label} sudah lewat. Perbarui tanggalnya.`;
+      const perDay = Math.ceil(need / days / 1000) * 1000;
+      return perDay > netDay
+        ? `${label} ${rp(need)} jatuh ${fmtDate(g.deadline)}. Butuh sekitar ${rp(perDay)} per hari, lebih besar dari sisa uang harian Anda (${rp(netDay)}). Coba cicil, cari keringanan, atau kecilkan nominalnya.`
+        : `${label} ${rp(need)} jatuh ${fmtDate(g.deadline)}. Sisihkan sekitar ${rp(perDay)} per hari mulai sekarang.`;
+    }).filter(Boolean);
+    return notes.map(t => `<div class="ew-partial" role="status">${ICON.info}<span>${t}</span></div>`).join("");
   }
 
   function savingsCard() {

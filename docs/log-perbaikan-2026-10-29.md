@@ -325,7 +325,7 @@ Gejala: setelah mencoba e statement Jago lalu reset total, kartu Jago muncul lag
 |---|---|
 | Reset menghapus data di server lewat `/api/wallets/<id>`. Untuk e statement (id `c:Jago`) alamat itu tidak dikenal server, jadi e statement tetap tersimpan dan terbaca lagi setelah reset | Server punya `DELETE /api/wallets` yang menghapus semua e-wallet dan e statement pengguna sekaligus, dan tombol reset memakainya (`muat-ulang.js`) |
 | "Isi contoh" memasukkan semua akun yang ada, termasuk e statement sisa, ke pilihan dompet di Profil tanpa terlihat sebagai pilihan | Hanya e-wallet bawaan yang ikut dipilih. Data lama dibersihkan saat dibuka: dompet buatan sendiri hanya terpilih kalau namanya ada di daftar opsi |
-| E statement di server yang tidak dikenal perangkat ini tetap dipakai | Dianggap sisa data lama, lalu dihapus dari server dan tidak dihitung (`mergeServerWallets`) |
+| E statement di server yang tidak dikenal perangkat ini tetap dipakai | Dianggap sisa data lama dan tidak dihitung (`mergeServerWallets`). Tidak dihapus dari server, karena bisa saja baru diunggah dari tab lain yang masih terbuka. Sisa data lama di server sudah dihapus oleh reset |
 | Menghapus dompet buatan sendiri (×) atau membatalkan pilihannya tidak menghapus e statement-nya di server, dan "Isi manual" ikut memanggil alamat yang salah | Semua penghapusan memakai `dropRemote`, yang memilih alamat yang benar untuk e-wallet dan e statement. Memilih "Isi manual" hanya memutus e-wallet, e statement tetap dipakai di langkah Dokumen |
 
 Diuji di browser: e statement Jago dibuat, reset, server kosong. E statement yang tertinggal di server tanpa ada di perangkat dihapus saat onboarding dibuka. Pilihan `c:Jago` tanpa opsi Jago dibuang. Hapus opsi Jago (×) menghapus e statement-nya di perangkat dan di server. Tidak ada galat di konsol.
@@ -333,3 +333,26 @@ Diuji di browser: e statement Jago dibuat, reset, server kosong. E statement yan
 **Tambahan V: tombol unggah PDF hilang setelah server dijalankan ulang.** Kalau di perangkat masih ada e statement tetapi server baru dijalankan ulang (datanya di memori hilang), pesan "Izin … sudah berakhir di server" mencoba mengambil nama e-wallet dari daftar e-wallet bawaan. E statement tidak ada di daftar itu, jadi kodenya galat, Laju mengira server mati, dan tombol "Unggah e statement (PDF)" disembunyikan. Sekarang e statement yang tidak ada di server tetap dipakai apa adanya tanpa pesan itu, karena isinya dari dokumen yang sudah dibaca. Pesan "Data terakhir" hanya untuk e-wallet. Diuji: e statement JOJO di perangkat dengan server kosong, tombol unggah tampil lagi.
 
 **Tambahan V (2): tanda "Server Laju belum berjalan" hanya kalau server memang tidak menjawab.** Sebelumnya galat apa pun saat menggabungkan data e-wallet dari server ikut dianggap server mati, sehingga tombol hubungkan dan unggah tersembunyi. Sekarang pengecekan server (`/api/config`) dipisah dari penggabungan data (`/api/wallets`). Galat di penggabungan dicatat di konsol ("Laju: gagal membaca data e-wallet dari server") dan data di perangkat tetap dipakai.
+
+## W. Revisi 5 Nov (Grace, branch dickson): e statement per 30 hari dan jejak per bulan
+
+| Bagian | Perubahan |
+|---|---|
+| Angka 30 hari e statement (`recalc_statement` di `server.py`) | Sebelumnya semua bulan yang diunggah digabung lalu dibagi rata ke 30 hari, dan mutasi 29 hari ikut dikali 30/29 (muncul angka tidak bulat seperti Rp849.310). Sekarang sama seperti e-wallet: 30 hari terakhir di dokumen saja. Bulan sebelumnya hanya masuk riwayat |
+| Riwayat per bulan (`history` di `categorize.py`) | Bulan e statement dihitung mundur dari hari ini, bukan dari tanggal terakhir dokumen, supaya sejajar dengan e-wallet. Ditambah `monthlyIn` dan `monthlyOut` (semua uang masuk dan keluar per bulan, tanpa pindahan antar akun sendiri, biaya admin ikut keluar) dan `fullMonths` (bulan yang tercakup penuh 30 hari) |
+| Jejak per bulan (`monthlyTrack` di `core.js`) | Dinilai per bulan, hanya untuk bulan yang dicakup semua akun terhubung: pencairan 30 hari terakhir turun 30% atau lebih dari median bulan sebelumnya, naik turun lebar (koefisien variasi di atas 0,35, minimal 3 bulan), dan jumlah bulan dengan uang keluar lebih besar dari uang masuk. Hasilnya jadi catatan di status data dan ikut di laporan bank (`dataTrust.monthly`). Tidak mengubah tier |
+| Onboarding | Cukup satu e statement. Tombol "Unggah bulan berikutnya" dan bar "x dari 6 bulan" hanya tampil di Profil, bagian E-wallet & izin. Di onboarding diganti kalimat "Cukup satu bulan untuk sekarang" |
+| E statement tidak dikenal perangkat | Tidak lagi dihapus dari server, hanya tidak dipakai, supaya unggahan dari tab lain tidak ikut terhapus |
+| Data contoh | `demo-data.json` dibuat ulang dengan cara hitung yang sama |
+
+Diuji: contoh e statement Jago di onboarding menampilkan angka bulat dan kalimat satu bulan, tanpa tombol bulan berikutnya; di Profil, E-wallet & izin, tombol dan bar 6 bulan tetap ada. GoPay + OVO simulasi: 6 bulan penuh, catatan "6 dari 6 bulan, uang keluar lebih besar dari uang masuk di akun yang terhubung" muncul (tarik saldo ke rekening yang tidak terdaftar dihitung keluar), terjemahan EN jalan. Tidak ada galat di konsol.
+
+## X. Revisi 5 Nov (Grace, branch dickson): riwayat GoPay asli dan catatan tenggat tujuan wajib
+
+| Bagian | Perubahan |
+|---|---|
+| Pembaca e statement (`openfinance/statement.py`) | Format riwayat transaksi GoPay asli kini terbaca. Satu transaksi terdiri dari beberapa baris: tanggal, jam, keterangan + ID transaksi, lalu metode pembayaran + jumlah. Jumlah dengan tanda minus = uang keluar, tanpa tanda = uang masuk. ID transaksi dibuang dari keterangan. Metode selain saldo dompet ikut ke keterangan (mis. "Top up GoPay lewat BCA VA"), supaya top up dari rekening bisa dipasangkan. Format satu baris yang lama tetap jalan |
+| Nomor pemilik | Nomor HP di kepala dokumen (mis. +62895...) disimpan sebagai nomor akun e statement itu dan ikut dipakai mencocokkan pindahan antar akun (bagian U) |
+| Catatan tenggat tujuan wajib (`goalDeadlineWarning`) | Perkiraan "sekitar 17 bulan lagi sampai Step 3" dihapus karena membingungkan dan rumusnya tidak menghitung tabungan yang sudah ada. Gantinya, untuk tiap tujuan wajib yang punya tenggat: "Biaya pendidikan awal Rp500.000 jatuh 13/11/2026. Sisihkan sekitar Rp63.000 per hari mulai sekarang." Kalau angka per hari lebih besar dari sisa uang harian, catatannya menyarankan cicil, cari keringanan, atau kecilkan nominal. Tenggat yang sudah lewat diminta diperbarui |
+
+Diuji dengan riwayat GoPay asli (Oktober 2026, 5 transaksi): kelimanya terbaca dengan arah dan jumlah yang benar, nomor pemilik terbaca, kartu menampilkan pengeluaran Rp255.895. Catatan: kepala dokumen menulis total pengeluaran Rp355.895, selisih Rp100.000 dari baris transaksi yang ada. Belum diketahui dari mana selisihnya, jadi total kepala dokumen belum dipakai sebagai pengecekan. Catatan tenggat diuji ID dan EN, tidak ada galat di konsol.
